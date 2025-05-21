@@ -1,7 +1,26 @@
 #include <iostream>
 #include <string>
+#include <chrono>
+#include <ctime>
+#include <iomanip>
 #include <sstream>
 #include <cstdlib>
+
+std::string getCurrentDateTime() {
+    time_t t = time(nullptr);
+    tm* tm_info = localtime(&t);
+
+    int hour = tm_info->tm_hour % 12;
+    if (hour == 0) hour = 12;
+    const char* ampm = (tm_info->tm_hour >= 12) ? "PM" : "AM";
+
+    char buf[30];
+    snprintf(buf, sizeof(buf), "%02d/%02d/%04d, %02d:%02d:%02d %s",
+             tm_info->tm_mon + 1, tm_info->tm_mday, tm_info->tm_year + 1900,
+             hour, tm_info->tm_min, tm_info->tm_sec, ampm);
+
+    return std::string(buf);
+}
 
 struct Screen
 {
@@ -105,7 +124,7 @@ int main()
                 Screen newScreen;
                 newScreen.currentLine = 0;
                 newScreen.totalLines = screens.size() + 1; //TODO: Replace with actual line count in specs?  
-                newScreen.createdDate = "2023-10-01"; //TODO: Set to current date
+                newScreen.createdDate = getCurrentDateTime();
                 newScreen.title = command[2];
                 screens.push_back(newScreen);
 
@@ -114,15 +133,19 @@ int main()
                 printScreen(newScreen);
             }
             else if(command[1] == "-r"){ // Resume existing screen
+                bool found = false;
                 for(int i = 0; i < screens.size(); i++){
                     if(screens[i].title == command[2]){
                         currentScreen = screens[i];
                         clearScreen();
                         printScreen(screens[i]);
+                        found = true;
                         break;
                     }
                 }
-                std::cout << "Screen not found.\n";
+                if (!found) {
+                    std::cout << "Screen not found.\n";
+                }
             }
         }
         else if ((command[0] == "initialize" || command[0] == "scheduler-test" || command[0] == "scheduler-stop" || command[0] == "report-util") && currentScreen.title == "Main Menu")
