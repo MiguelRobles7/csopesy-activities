@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <sstream>
 #include <cstdlib>
+#include <vector>
 
 std::string getCurrentDateTime() {
     time_t t = time(nullptr);
@@ -45,22 +46,6 @@ void printScreen(const Screen& screen)
     std::cout << "Created Date: " << screen.createdDate << "\n";
 }
 
-void clearScreen()
-{
-    std::cout << "\033[2J\033[1;1H"; // ANSI escape code to clear the screen
-
-    /*
-    IF DOESNT WORK, UNCOMMENT THIS
-
-    #ifdef _WIN32
-        std::system("cls");
-    #else
-        std::system("clear");
-    #endif
-        printHeader();
-    */
-}
-
 void printHeader()
 {
     std::cout
@@ -72,6 +57,16 @@ void printHeader()
         << "                                             \n"
         << "Type 'exit' to quit, 'clear' to clear the screen\n\n";
 }
+
+void clearScreen()
+{
+    #ifdef _WIN32
+        std::system("cls");
+    #else
+        std::system("clear");
+    #endif
+}
+
 
 int main()
 {
