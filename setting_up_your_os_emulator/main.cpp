@@ -18,9 +18,9 @@ std::string getCurrentDateTime() {
     const char* ampm = (tm_info->tm_hour >= 12) ? "PM" : "AM";
 
     char buf[30];
-    snprintf(buf, sizeof(buf), "%02d/%02d/%04d, %02d:%02d:%02d %s",
+    snprintf(buf, sizeof(buf), "%02d/%02d/%04d %02d:%02d:%02d %s",
              tm_info->tm_mon + 1, tm_info->tm_mday, tm_info->tm_year + 1900,
-             hour, tm_info->tm_min, tm_info->tm_sec, ampm);
+             hour, tm_info->tm_min, tm_info->tm_sec, ampm); // Removed comma for 'screen -ls' command
 
     return std::string(buf);
 }
@@ -119,7 +119,7 @@ int main()
             clearScreen();
             printHeader();
         }
-        else if (command[0] == "screen" && command.size() == 3 && currentScreen.title == "Main Menu")
+        else if (command[0] == "screen" && (command.size() == 3 || command.size() == 2) && currentScreen.title == "Main Menu")
         {
             if(command[1] == "-s"){ // Create a new screen
                 Screen newScreen = createScreen(command[2]);
@@ -144,6 +144,22 @@ int main()
                     std::cout << "Screen not found.\n";
                 }
             }
+            else if(command[1] == "-ls") { // List all processes
+                std::cout << "------------------------------\nRunning processes:\n";
+
+                for (int i = 0; i < screens.size(); i++)
+                {
+                    std::cout << "process" << i << "  " << screens.at(i).createdDate << "    ";
+                    if(screens.at(i).currentLine < screens.at(i).totalLines){
+                        std::cout << "Finished";
+                    } else {
+                        std::cout << "Core " << screens.at(i).cpuId << "    " << screens.at(i).currentLine << " / " << screens.at(i).totalLines << "\n";
+                    }
+                }
+
+                std::cout << "\nFinished processes:\n------------------------------\n";
+            }
+
         }
         else if ((command[0] == "initialize" || command[0] == "scheduler-test" || command[0] == "scheduler-stop" || command[0] == "report-util") && currentScreen.title == "Main Menu")
         {
