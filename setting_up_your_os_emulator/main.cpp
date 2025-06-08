@@ -6,8 +6,18 @@
 #include <sstream>
 #include <cstdlib>
 #include <vector>
+#include <random>
 
 int CPU_CORES = 4;
+
+int getRand(int min, int max) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+
+    std::uniform_int_distribution<> dist(min, max);
+    int num = dist(gen);
+    return num;
+}
 
 std::string getCurrentDateTime() {
     time_t t = time(nullptr);
@@ -39,7 +49,7 @@ Screen createScreen(std::string title){
     Screen newScreen;
     newScreen.cpuId = 0;
     newScreen.currentLine = 0;
-    newScreen.totalLines = 0;
+    newScreen.totalLines = getRand(1,1000);
     newScreen.createdDate = getCurrentDateTime(); 
     newScreen.title = title;
     return newScreen;
