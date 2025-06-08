@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <vector>
 #include <random>
+#include <fstream>
 
 int CPU_CORES = 4;
 
@@ -171,7 +172,22 @@ int main()
             }
 
         }
-        else if ((command[0] == "initialize" || command[0] == "scheduler-test" || command[0] == "scheduler-stop" || command[0] == "report-util") && currentScreen.title == "Main Menu")
+        else if(command[0] == "print") { // GROUP HOMEWORK W6;  REMOVE/DISABLE AFTER SUBMISSION
+            for (int i = 0; i < screens.size(); i++)
+            {
+                std::string filename = screens.at(i).name + ".txt";
+                std::ofstream outfile(filename);
+
+                if(outfile.is_open()){
+                    outfile << "Process name: " << screens.at(i).name << "\nLogs:\n\n";
+                    
+                    //TODO: Print hello world lines here
+                    // <date> <core> <text>
+                }
+            }
+            
+        }
+        else if ((command[0] == "initialize" || command[0] == "scheduler-test" || command[0] == "scheduler-stop" || command[0] == "report-util") && currentScreen.name == "Main Menu")
         {
             std::cout << command[0] << " command recognized. Doing something.\n";
         }
