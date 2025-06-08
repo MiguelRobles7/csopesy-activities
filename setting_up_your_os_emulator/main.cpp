@@ -187,7 +187,16 @@ int main()
                     // <date> <core> <text>
                 }
             }
-            
+        }
+        else if (command[0] == "generate") { // HELPER FUNC TO CREATE PROCESSES
+            // Usage: "generate <num_of_processes>"
+            for (int i = 0; i < std::stoi(command[1]); i++)
+            {
+                std::string pname = "process" + std::to_string(i);
+                Screen newScreen = createScreen(pname);
+                screens.push_back(newScreen);
+            }
+            std::cout << "Generated " << command[1] << " processes!";
         }
         else if ((command[0] == "initialize" || command[0] == "scheduler-test" || command[0] == "scheduler-stop" || command[0] == "report-util") && currentScreen.name == "Main Menu")
         {
