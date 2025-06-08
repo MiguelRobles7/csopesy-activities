@@ -25,29 +25,24 @@ std::string getCurrentDateTime() {
     return std::string(buf);
 }
 
-struct Process 
-{
-    std::string name;
-    std::string timestamp;
-    int cpu_id;
-    int current_line;
-    int total_line;
-};
-
 struct Screen
 {
+    int cpuId;
     int currentLine;
     int totalLines;
     std::string createdDate;
     std::string title;
 };
 
-void createScreen(std::string title){
+
+Screen createScreen(std::string title){
     Screen newScreen;
+    newScreen.cpuId = 0;
     newScreen.currentLine = 0;
     newScreen.totalLines = 0;
-    newScreen.createdDate = "MM/DD/YYYY HH:MM:SS AM/PM"; 
+    newScreen.createdDate = getCurrentDateTime(); 
     newScreen.title = title;
+    return newScreen;
 }
 
 void printScreen(const Screen& screen)
@@ -127,11 +122,7 @@ int main()
         else if (command[0] == "screen" && command.size() == 3 && currentScreen.title == "Main Menu")
         {
             if(command[1] == "-s"){ // Create a new screen
-                Screen newScreen;
-                newScreen.currentLine = 0;
-                newScreen.totalLines = screens.size() + 1; //TODO: Replace with actual line count in specs?  
-                newScreen.createdDate = getCurrentDateTime();
-                newScreen.title = command[2];
+                Screen newScreen = createScreen(command[2]);
                 screens.push_back(newScreen);
 
                 currentScreen = newScreen;
