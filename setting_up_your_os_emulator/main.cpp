@@ -7,6 +7,8 @@
 #include <cstdlib>
 #include <vector>
 
+int CPU_CORES = 4;
+
 std::string getCurrentDateTime() {
     time_t t = time(nullptr);
     tm* tm_info = localtime(&t);
@@ -22,6 +24,15 @@ std::string getCurrentDateTime() {
 
     return std::string(buf);
 }
+
+struct Process 
+{
+    std::string name;
+    std::string timestamp;
+    int cpu_id;
+    int current_line;
+    int total_line;
+};
 
 struct Screen
 {
