@@ -48,7 +48,7 @@ Screen createScreen(std::string name) {
     Screen newScreen;
     newScreen.cpuId = 0;
     newScreen.currentLine = 0;
-    newScreen.totalLines = getRand(1, 1000);
+    newScreen.totalLines = 100;
     newScreen.createdDate = getCurrentDateTime(); 
     newScreen.name = name;
     return newScreen;
@@ -78,41 +78,45 @@ void clearScreen() {
     #endif
 }
 
-std::queue<Screen> readyQueue;
+std::queue<Screen*> readyQueue;
 std::mutex queueMutex;
 std::condition_variable cv;
 bool stopScheduler = false;
 
 void cpuWorker(int coreId) {
+    
     while (!stopScheduler) {
         std::unique_lock<std::mutex> lock(queueMutex);
         cv.wait(lock, [] { return !readyQueue.empty() || stopScheduler; });
 
         if (stopScheduler && readyQueue.empty()) break;
 
-        Screen screen = readyQueue.front();
+        Screen* screen = readyQueue.front();
         readyQueue.pop();
         lock.unlock();
+        std::cout << "[Core " << coreId << "] Executing " << screen->name << "\n";
 
-        for (int i = 0; i < 5; ++i) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        for (int i = 0; i < screen->totalLines; ++i) {
+            screen->currentLine++;
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
             std::string now = getCurrentDateTime();
-            std::string filename = output_dir + "/" + screen.name + ".txt";
+            std::string filename = output_dir + "/" + screen->name + ".txt";
             std::ofstream outFile(filename, std::ios::app);
             if (outFile.is_open()) {
                 outFile << "(" << now << ") "
                         << "Core:" << coreId
-                        << " \"Hello world from " << screen.name << "!\"\n";
+                        << " \"Hello world from " << screen->name << "!\"\n";
                 outFile.close();
             }
         }
+
     }
 }
 
 void schedulerThreadFunc(std::vector<Screen>& screens) {
     for (auto& screen : screens) {
         std::unique_lock<std::mutex> lock(queueMutex);
-        readyQueue.push(screen);
+        readyQueue.push(&screen);
         lock.unlock();
         cv.notify_one();
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -196,11 +200,16 @@ int main() {
             }
         } 
         else if (command[0] == "generate") {
-            for (int i = 0; i < std::stoi(command[1]); ++i) {
-                std::string pname = "process" + std::to_string(i);
-                screens.push_back(createScreen(pname));
+            if(command[1] == "") {
+                std::cout << "Specify number of process to generate\n\n";
             }
-            std::cout << "Generated " << command[1] << " processes!\n";
+            else {
+                for (int i = 0; i < std::stoi(command[1]); ++i) {
+                    std::string pname = "process" + std::to_string(i);
+                    screens.push_back(createScreen(pname));
+                }
+                std::cout << "Generated " << command[1] << " processes!\n";
+            }
         } 
         else if (command[0] == "print") {
             std::thread scheduler(schedulerThreadFunc, std::ref(screens));
@@ -210,9 +219,16 @@ int main() {
             }
             scheduler.join();
             {
-                std::this_thread::sleep_for(std::chrono::seconds(4));
-                std::lock_guard<std::mutex> lock(queueMutex);
-                stopScheduler = true;
+                while (true) {
+                    std::unique_lock<std::mutex> lock(queueMutex);
+                    if (readyQueue.empty()) break;
+                    lock.unlock();
+                    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                }
+                {
+                    std::lock_guard<std::mutex> lock(queueMutex);
+                    stopScheduler = true;
+                }
             }
             cv.notify_all();
             for (auto& t : cpuThreads) {
