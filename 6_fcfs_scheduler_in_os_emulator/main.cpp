@@ -185,7 +185,7 @@ void startPrintJob(std::vector<Screen> &screens)
     }
 
     isPrinting = false;
-    std::cout << "✅ Print job completed. Logs saved in: " << output_dir << "\n";
+    //std::cout << "✅ Print job completed. Logs saved in: " << output_dir << "\n";
 }
 
 int main()
@@ -275,7 +275,7 @@ int main()
                         << "Core " << screens[i].cpuId << "    "
                         << screens[i].currentLine << " / " 
                         << screens[i].totalLines << "\n";
-                }
+                    }
                 }
 
                 std::cout << "\nFinished processes:\n------------------------------\n";
@@ -311,14 +311,14 @@ int main()
         {
             if (isPrinting)
             {
-                std::cout << "Print job already running.\n";
+                //std::cout << "Print job already running.\n";
             }
             else
             {
                 stopScheduler = false; // reset in case of re-run
                 printThread = std::thread(startPrintJob, std::ref(screens));
                 printThread.detach(); // run in background
-                std::cout << "⏳ Print job started in background.\n";
+                //std::cout << "⏳ Print job started in background.\n";
             }
         }
         else if ((command[0] == "initialize" || command[0] == "scheduler-test" || command[0] == "scheduler-stop" || command[0] == "report-util") && currentScreen.name == "Main Menu")
