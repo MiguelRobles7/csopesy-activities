@@ -278,7 +278,7 @@ int main()
                     }
                 }
 
-                std::cout << "\nFinished processes:\n------------------------------\n";
+                std::cout << "\nFinished processes:\n"; 
                 for (size_t i = 0; i < screens.size(); ++i)
                 {
                     if(screens[i].currentLine == screens[i].totalLines){
@@ -289,6 +289,7 @@ int main()
                         << screens[i].totalLines << "\n";
                     }
                 }
+                std::cout << "------------------------------\n";
             }
         }
         else if (command[0] == "generate")
