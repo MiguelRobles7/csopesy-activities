@@ -19,19 +19,22 @@ bool isPrinting = false;
 int CPU_CORES = 4;
 std::string output_dir = "./";
 
-int getRand(int min, int max) {
+int getRand(int min, int max)
+{
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_int_distribution<> dist(min, max);
     return dist(gen);
 }
 
-std::string getCurrentDateTime() {
+std::string getCurrentDateTime()
+{
     time_t t = time(nullptr);
-    tm* tm_info = localtime(&t);
+    tm *tm_info = localtime(&t);
     int hour = tm_info->tm_hour % 12;
-    if (hour == 0) hour = 12;
-    const char* ampm = (tm_info->tm_hour >= 12) ? "PM" : "AM";
+    if (hour == 0)
+        hour = 12;
+    const char *ampm = (tm_info->tm_hour >= 12) ? "PM" : "AM";
     char buf[30];
     snprintf(buf, sizeof(buf), "%02d/%02d/%04d %02d:%02d:%02d %s",
              tm_info->tm_mon + 1, tm_info->tm_mday, tm_info->tm_year + 1900,
@@ -39,7 +42,8 @@ std::string getCurrentDateTime() {
     return std::string(buf);
 }
 
-struct Screen {
+struct Screen
+{
     int cpuId;
     int currentLine;
     int totalLines;
@@ -47,23 +51,26 @@ struct Screen {
     std::string name;
 };
 
-Screen createScreen(std::string name) {
+Screen createScreen(std::string name)
+{
     Screen newScreen;
     newScreen.cpuId = 0;
     newScreen.currentLine = 0;
     newScreen.totalLines = 100;
-    newScreen.createdDate = getCurrentDateTime(); 
+    newScreen.createdDate = getCurrentDateTime();
     newScreen.name = name;
     return newScreen;
 }
 
-void printScreen(const Screen& screen) {
+void printScreen(const Screen &screen)
+{
     std::cout << "Screen Title: " << screen.name << "\n";
     std::cout << "Current Line: " << screen.currentLine << "/" << screen.totalLines << "\n";
     std::cout << "Created Date: " << screen.createdDate << "\n";
 }
 
-void printHeader() {
+void printHeader()
+{
     std::cout << "   ___________ ____  ____  _____________  __ \n"
               << "  / ____/ ___// __ \\/ __ \\/ ____/ ___/\\ \\/ / \n"
               << " / /    \\__ \\/ / / / /_/ / __/  \\__ \\  \\  /  \n"
@@ -73,51 +80,59 @@ void printHeader() {
               << "Type 'exit' to quit, 'clear' to clear the screen\n\n";
 }
 
-void clearScreen() {
-    #ifdef _WIN32
-        std::system("cls");
-    #else
-        std::system("clear");
-    #endif
+void clearScreen()
+{
+#ifdef _WIN32
+    std::system("cls");
+#else
+    std::system("clear");
+#endif
 }
 
-std::queue<Screen*> readyQueue;
+std::queue<Screen *> readyQueue;
 std::mutex queueMutex;
 std::condition_variable cv;
 bool stopScheduler = false;
 
-void cpuWorker(int coreId) {
-    
-    while (!stopScheduler) {
+void cpuWorker(int coreId)
+{
+
+    while (!stopScheduler)
+    {
         std::unique_lock<std::mutex> lock(queueMutex);
-        cv.wait(lock, [] { return !readyQueue.empty() || stopScheduler; });
+        cv.wait(lock, []
+                { return !readyQueue.empty() || stopScheduler; });
 
-        if (stopScheduler && readyQueue.empty()) break;
+        if (stopScheduler && readyQueue.empty())
+            break;
 
-        Screen* screen = readyQueue.front();
+        Screen *screen = readyQueue.front();
         readyQueue.pop();
         lock.unlock();
         std::cout << "[Core " << coreId << "] Executing " << screen->name << "\n";
 
-        for (int i = 0; i < screen->totalLines; ++i) {
+        for (int i = 0; i < screen->totalLines; ++i)
+        {
             screen->currentLine++;
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             std::string now = getCurrentDateTime();
             std::string filename = output_dir + "/" + screen->name + ".txt";
             std::ofstream outFile(filename, std::ios::app);
-            if (outFile.is_open()) {
+            if (outFile.is_open())
+            {
                 outFile << "(" << now << ") "
                         << "Core:" << coreId
                         << " \"Hello world from " << screen->name << "!\"\n";
                 outFile.close();
             }
         }
-
     }
 }
 
-void schedulerThreadFunc(std::vector<Screen>& screens) {
-    for (auto& screen : screens) {
+void schedulerThreadFunc(std::vector<Screen> &screens)
+{
+    for (auto &screen : screens)
+    {
         std::unique_lock<std::mutex> lock(queueMutex);
         readyQueue.push(&screen);
         lock.unlock();
@@ -126,21 +141,25 @@ void schedulerThreadFunc(std::vector<Screen>& screens) {
     }
 }
 
-void startPrintJob(std::vector<Screen>& screens) {
+void startPrintJob(std::vector<Screen> &screens)
+{
     isPrinting = true;
     std::thread scheduler(schedulerThreadFunc, std::ref(screens));
 
     std::vector<std::thread> cpuThreads;
-    for (int i = 0; i < CPU_CORES; ++i) {
+    for (int i = 0; i < CPU_CORES; ++i)
+    {
         cpuThreads.emplace_back(cpuWorker, i);
     }
 
     scheduler.join();
 
     // Wait for queue to empty instead of fixed sleep
-    while (true) {
+    while (true)
+    {
         std::unique_lock<std::mutex> lock(queueMutex);
-        if (readyQueue.empty()) break;
+        if (readyQueue.empty())
+            break;
         lock.unlock();
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
     }
@@ -152,7 +171,8 @@ void startPrintJob(std::vector<Screen>& screens) {
 
     cv.notify_all();
 
-    for (auto& t : cpuThreads) {
+    for (auto &t : cpuThreads)
+    {
         t.join();
     }
 
@@ -160,7 +180,8 @@ void startPrintJob(std::vector<Screen>& screens) {
     std::cout << "✅ Print job completed. Logs saved in: " << output_dir << "\n";
 }
 
-int main() {
+int main()
+{
     printHeader();
     std::string cmd;
     std::vector<Screen> screens;
@@ -169,7 +190,8 @@ int main() {
     mainMenu.name = "Main Menu";
     currentScreen = mainMenu;
 
-    while (true) {
+    while (true)
+    {
         std::cout << "Enter a command: ";
         if (!std::getline(std::cin, cmd))
             break;
@@ -177,40 +199,51 @@ int main() {
         std::istringstream inputStream(cmd);
         std::vector<std::string> command;
         std::string token;
-        while (inputStream >> token) {
+        while (inputStream >> token)
+        {
             command.push_back(token);
         }
 
-        if (command.empty()) {
+        if (command.empty())
+        {
             continue;
-        } 
-        else if (command[0] == "exit") {
-            if (currentScreen.name != "Main Menu") {
+        }
+        else if (command[0] == "exit")
+        {
+            if (currentScreen.name != "Main Menu")
+            {
                 currentScreen = mainMenu;
                 clearScreen();
                 printHeader();
                 continue;
             }
-            else {
+            else
+            {
                 break;
             }
         }
-        else if (command[0] == "clear" && currentScreen.name == "Main Menu") {
+        else if (command[0] == "clear" && currentScreen.name == "Main Menu")
+        {
             clearScreen();
             printHeader();
-        } 
-        else if (command[0] == "screen" && (command.size() == 3 || command.size() == 2) && currentScreen.name == "Main Menu") {
-            if (command[1] == "-s") {
+        }
+        else if (command[0] == "screen" && (command.size() == 3 || command.size() == 2) && currentScreen.name == "Main Menu")
+        {
+            if (command[1] == "-s")
+            {
                 Screen newScreen = createScreen(command[2]);
                 screens.push_back(newScreen);
                 currentScreen = newScreen;
                 clearScreen();
                 printScreen(newScreen);
-            } 
-            else if (command[1] == "-r") {
+            }
+            else if (command[1] == "-r")
+            {
                 bool found = false;
-                for (auto& s : screens) {
-                    if (s.name == command[2]) {
+                for (auto &s : screens)
+                {
+                    if (s.name == command[2])
+                    {
                         currentScreen = s;
                         clearScreen();
                         printScreen(s);
@@ -218,13 +251,16 @@ int main() {
                         break;
                     }
                 }
-                if (!found) {
+                if (!found)
+                {
                     std::cout << "Screen not found.\n";
                 }
-            } 
-            else if (command[1] == "-ls") {
+            }
+            else if (command[1] == "-ls")
+            {
                 std::cout << "------------------------------\nRunning processes:\n";
-                for (size_t i = 0; i < screens.size(); ++i) {
+                for (size_t i = 0; i < screens.size(); ++i)
+                {
                     std::cout << "process" << i << "  " << screens[i].createdDate << "    ";
                     if (screens[i].currentLine >= screens[i].totalLines)
                         std::cout << "Finished";
@@ -235,35 +271,43 @@ int main() {
                 }
                 std::cout << "\nFinished processes:\n------------------------------\n";
             }
-        } 
-        else if (command[0] == "generate") {
-            if(command[1] == "") {
+        }
+        else if (command[0] == "generate")
+        {
+            if (command[1] == "")
+            {
                 std::cout << "Specify number of process to generate\n\n";
             }
-            else {
-                for (int i = 0; i < std::stoi(command[1]); ++i) {
+            else
+            {
+                for (int i = 0; i < std::stoi(command[1]); ++i)
+                {
                     std::string pname = "process" + std::to_string(i);
                     screens.push_back(createScreen(pname));
                 }
                 std::cout << "Generated " << command[1] << " processes!\n";
             }
-        } 
-        else if (command[0] == "print") {
-            if (isPrinting) {
+        }
+        else if (command[0] == "print")
+        {
+            if (isPrinting)
+            {
                 std::cout << "Print job already running.\n";
-            } 
-            else {
+            }
+            else
+            {
                 stopScheduler = false; // reset in case of re-run
                 printThread = std::thread(startPrintJob, std::ref(screens));
                 printThread.detach(); // run in background
                 std::cout << "⏳ Print job started in background.\n";
             }
-        } 
+        }
         else if ((command[0] == "initialize" || command[0] == "scheduler-test" || command[0] == "scheduler-stop" || command[0] == "report-util") && currentScreen.name == "Main Menu")
         {
             std::cout << command[0] << " command recognized. Doing something.\n";
         }
-        else {
+        else
+        {
             std::cout << "Unknown command: " << cmd << "\n";
         }
     }

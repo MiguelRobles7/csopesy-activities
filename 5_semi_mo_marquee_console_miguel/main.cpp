@@ -10,43 +10,52 @@
 using namespace std;
 
 // Enable or disable non-blocking input
-void setNonBlockingInput(bool enable) {
+void setNonBlockingInput(bool enable)
+{
     static struct termios oldt, newt;
-    if (enable) {
+    if (enable)
+    {
         tcgetattr(STDIN_FILENO, &oldt);
         newt = oldt;
         newt.c_lflag &= ~(ICANON | ECHO);
         tcsetattr(STDIN_FILENO, TCSANOW, &newt);
         fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK);
-    } else {
+    }
+    else
+    {
         tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
         fcntl(STDIN_FILENO, F_SETFL, 0);
     }
 }
 
 // Clear current terminal line
-void clearLine() {
+void clearLine()
+{
     cout << "\33[2K\r" << flush;
 }
 
 // Get current terminal width
-int getTerminalWidth() {
+int getTerminalWidth()
+{
     struct winsize w;
     ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
     return w.ws_col > 0 ? w.ws_col : 80; // Fallback to 80 if not available
 }
 
 // Marquee display logic
-void marquee(const string& message, int refreshRateMs) {
+void marquee(const string &message, int refreshRateMs)
+{
     int pos = 0;
     setNonBlockingInput(true);
 
-    while (true) {
+    while (true)
+    {
         int width = getTerminalWidth();
         string spacer(width, ' ');
         string view = spacer;
 
-        for (int i = 0; i < message.length(); ++i) {
+        for (int i = 0; i < message.length(); ++i)
+        {
             if ((pos + i) < width)
                 view[pos + i] = message[i];
         }
@@ -66,7 +75,8 @@ void marquee(const string& message, int refreshRateMs) {
     setNonBlockingInput(false);
 }
 
-int main() {
+int main()
+{
     string msg;
     int refreshRate = 50;
 

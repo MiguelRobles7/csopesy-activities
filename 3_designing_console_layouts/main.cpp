@@ -7,13 +7,15 @@
 #include <cstdlib>
 #include <vector>
 
-std::string getCurrentDateTime() {
+std::string getCurrentDateTime()
+{
     time_t t = time(nullptr);
-    tm* tm_info = localtime(&t);
+    tm *tm_info = localtime(&t);
 
     int hour = tm_info->tm_hour % 12;
-    if (hour == 0) hour = 12;
-    const char* ampm = (tm_info->tm_hour >= 12) ? "PM" : "AM";
+    if (hour == 0)
+        hour = 12;
+    const char *ampm = (tm_info->tm_hour >= 12) ? "PM" : "AM";
 
     char buf[30];
     snprintf(buf, sizeof(buf), "%02d/%02d/%04d, %02d:%02d:%02d %s",
@@ -31,15 +33,16 @@ struct Screen
     std::string title;
 };
 
-void createScreen(std::string title){
+void createScreen(std::string title)
+{
     Screen newScreen;
     newScreen.currentLine = 0;
     newScreen.totalLines = 0;
-    newScreen.createdDate = "MM/DD/YYYY HH:MM:SS AM/PM"; 
+    newScreen.createdDate = "MM/DD/YYYY HH:MM:SS AM/PM";
     newScreen.title = title;
 }
 
-void printScreen(const Screen& screen)
+void printScreen(const Screen &screen)
 {
     std::cout << "Screen Title: " << screen.title << "\n";
     std::cout << "Current Line: " << screen.currentLine << "/" << screen.totalLines << "\n";
@@ -60,13 +63,12 @@ void printHeader()
 
 void clearScreen()
 {
-    #ifdef _WIN32
-        std::system("cls");
-    #else
-        std::system("clear");
-    #endif
+#ifdef _WIN32
+    std::system("cls");
+#else
+    std::system("clear");
+#endif
 }
-
 
 int main()
 {
@@ -99,26 +101,30 @@ int main()
         }
         else if (command[0] == "exit")
         {
-            if(currentScreen.title != "Main Menu"){
+            if (currentScreen.title != "Main Menu")
+            {
                 currentScreen = mainMenu;
                 clearScreen();
                 printHeader();
                 continue;
             }
-            else{
+            else
+            {
                 break;
             }
         }
-        else if (command[0] == "clear" && currentScreen.title == "Main Menu") { 
+        else if (command[0] == "clear" && currentScreen.title == "Main Menu")
+        {
             clearScreen();
             printHeader();
         }
         else if (command[0] == "screen" && command.size() == 3 && currentScreen.title == "Main Menu")
         {
-            if(command[1] == "-s"){ // Create a new screen
+            if (command[1] == "-s")
+            { // Create a new screen
                 Screen newScreen;
                 newScreen.currentLine = 0;
-                newScreen.totalLines = screens.size() + 1; //TODO: Replace with actual line count in specs?  
+                newScreen.totalLines = screens.size() + 1; // TODO: Replace with actual line count in specs?
                 newScreen.createdDate = getCurrentDateTime();
                 newScreen.title = command[2];
                 screens.push_back(newScreen);
@@ -127,10 +133,13 @@ int main()
                 clearScreen();
                 printScreen(newScreen);
             }
-            else if(command[1] == "-r"){ // Resume existing screen
+            else if (command[1] == "-r")
+            { // Resume existing screen
                 bool found = false;
-                for(int i = 0; i < screens.size(); i++){
-                    if(screens[i].title == command[2]){
+                for (int i = 0; i < screens.size(); i++)
+                {
+                    if (screens[i].title == command[2])
+                    {
                         currentScreen = screens[i];
                         clearScreen();
                         printScreen(screens[i]);
@@ -138,7 +147,8 @@ int main()
                         break;
                     }
                 }
-                if (!found) {
+                if (!found)
+                {
                     std::cout << "Screen not found.\n";
                 }
             }

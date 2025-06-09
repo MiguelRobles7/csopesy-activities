@@ -3,22 +3,24 @@
 #include <vector>
 #include <sstream>
 #include <ctime>
-#include <iomanip>  // for std::put_time (needed for formatted output)
+#include <iomanip> // for std::put_time (needed for formatted output)
 
 // Truncate long strings to fit in UI
-std::string truncate(const std::string& str, int width) {
+std::string truncate(const std::string &str, int width)
+{
     return (int)str.length() > width ? str.substr(0, width - 3) + "..." : str;
 }
 
-void drawLayout() {
-    initscr();             // Start curses mode
-    noecho();              // Don't echo input
-    curs_set(0);           // Hide cursor
+void drawLayout()
+{
+    initscr();   // Start curses mode
+    noecho();    // Don't echo input
+    curs_set(0); // Hide cursor
     int row = 1;
 
     // 🕒 Real current datetime
     std::time_t t = std::time(nullptr);
-    std::tm* now = std::localtime(&t);
+    std::tm *now = std::localtime(&t);
     std::ostringstream datetime;
     datetime << std::put_time(now, "%a %b %d %H:%M:%S %Y");
 
@@ -44,7 +46,8 @@ void drawLayout() {
     mvprintw(row++, 2, "|=======================================================================================|");
 
     // Dummy process list
-    struct Process {
+    struct Process
+    {
         int pid;
         std::string type;
         std::string name;
@@ -59,26 +62,30 @@ void drawLayout() {
         {5678, "C+G", "C:\\StartMenuExperienceHost.exe", "75MiB"},
     };
 
-    for (const auto& p : processes) {
+    for (const auto &p : processes)
+    {
         std::string line = "|    0   N/A  N/A      ";
         line += std::to_string(p.pid) + "    ";
         line += p.type + "   ";
         line += truncate(p.name, 35);
-        while (line.length() < 79) line += " ";
+        while (line.length() < 79)
+            line += " ";
         line += p.mem;
-        while (line.length() < 88) line += " ";
+        while (line.length() < 88)
+            line += " ";
         line += "|";
         mvprintw(row++, 2, "%s", line.c_str());
     }
 
     mvprintw(row++, 2, "+---------------------------------------------------------------------------------------+");
 
-    refresh();  // Print to screen
-    getch();    // Wait for user input
-    endwin();   // End curses mode
+    refresh(); // Print to screen
+    getch();   // Wait for user input
+    endwin();  // End curses mode
 }
 
-int main() {
+int main()
+{
     drawLayout();
     return 0;
 }
