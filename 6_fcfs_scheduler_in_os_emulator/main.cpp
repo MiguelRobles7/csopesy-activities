@@ -109,10 +109,14 @@ void cpuWorker(int coreId)
         Screen *screen = readyQueue.front();
         readyQueue.pop();
         lock.unlock();
-        std::cout << "[Core " << coreId << "] Executing " << screen->name << "\n";
+        //std::cout << "[Core " << coreId << "] Executing " << screen->name << "\n";
+
+        bool headerPrinted = false;
 
         for (int i = 0; i < screen->totalLines; ++i)
         {
+            if(i==0) headerPrinted = false;
+
             screen->currentLine++;
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             std::string now = getCurrentDateTime();
@@ -120,6 +124,10 @@ void cpuWorker(int coreId)
             std::ofstream outFile(filename, std::ios::app);
             if (outFile.is_open())
             {
+                if(!headerPrinted) {
+                    outFile << "Process name: " << screen->name << "\nLogs:\n\n";
+                    headerPrinted = true;
+                }
                 outFile << "(" << now << ") "
                         << "Core:" << coreId
                         << " \"Hello world from " << screen->name << "!\"\n";
