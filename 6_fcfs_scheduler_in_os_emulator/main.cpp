@@ -13,6 +13,9 @@
 #include <queue>
 #include <condition_variable>
 
+std::thread printThread;
+bool isPrinting = false;
+
 int CPU_CORES = 4;
 std::string output_dir = "./";
 
@@ -123,6 +126,40 @@ void schedulerThreadFunc(std::vector<Screen>& screens) {
     }
 }
 
+void startPrintJob(std::vector<Screen>& screens) {
+    isPrinting = true;
+    std::thread scheduler(schedulerThreadFunc, std::ref(screens));
+
+    std::vector<std::thread> cpuThreads;
+    for (int i = 0; i < CPU_CORES; ++i) {
+        cpuThreads.emplace_back(cpuWorker, i);
+    }
+
+    scheduler.join();
+
+    // Wait for queue to empty instead of fixed sleep
+    while (true) {
+        std::unique_lock<std::mutex> lock(queueMutex);
+        if (readyQueue.empty()) break;
+        lock.unlock();
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(queueMutex);
+        stopScheduler = true;
+    }
+
+    cv.notify_all();
+
+    for (auto& t : cpuThreads) {
+        t.join();
+    }
+
+    isPrinting = false;
+    std::cout << "✅ Print job completed. Logs saved in: " << output_dir << "\n";
+}
+
 int main() {
     printHeader();
     std::string cmd;
@@ -212,29 +249,15 @@ int main() {
             }
         } 
         else if (command[0] == "print") {
-            std::thread scheduler(schedulerThreadFunc, std::ref(screens));
-            std::vector<std::thread> cpuThreads;
-            for (int i = 0; i < CPU_CORES; ++i) {
-                cpuThreads.emplace_back(cpuWorker, i);
+            if (isPrinting) {
+                std::cout << "Print job already running.\n";
+            } 
+            else {
+                stopScheduler = false; // reset in case of re-run
+                printThread = std::thread(startPrintJob, std::ref(screens));
+                printThread.detach(); // run in background
+                std::cout << "⏳ Print job started in background.\n";
             }
-            scheduler.join();
-            {
-                while (true) {
-                    std::unique_lock<std::mutex> lock(queueMutex);
-                    if (readyQueue.empty()) break;
-                    lock.unlock();
-                    std::this_thread::sleep_for(std::chrono::milliseconds(500));
-                }
-                {
-                    std::lock_guard<std::mutex> lock(queueMutex);
-                    stopScheduler = true;
-                }
-            }
-            cv.notify_all();
-            for (auto& t : cpuThreads) {
-                t.join();
-            }
-            std::cout << "Print logs generated in: " << output_dir << "\n";
         } 
         else if ((command[0] == "initialize" || command[0] == "scheduler-test" || command[0] == "scheduler-stop" || command[0] == "report-util") && currentScreen.name == "Main Menu")
         {
