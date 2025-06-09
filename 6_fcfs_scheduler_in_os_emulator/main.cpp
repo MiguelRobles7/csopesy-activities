@@ -269,15 +269,26 @@ int main()
                 std::cout << "------------------------------\nRunning processes:\n";
                 for (size_t i = 0; i < screens.size(); ++i)
                 {
-                    std::cout << "process" << i << "  " << screens[i].createdDate << "    ";
-                    if (screens[i].currentLine >= screens[i].totalLines)
-                        std::cout << "Finished";
-                    else
-                        std::cout << "Core " << screens[i].cpuId << "    "
-                                  << screens[i].currentLine << " / " << screens[i].totalLines;
-                    std::cout << "\n";
+                    if(screens[i].currentLine < screens[i].totalLines){
+                        std::cout << "process" << i << "  " 
+                        << screens[i].createdDate << "    " 
+                        << "Core " << screens[i].cpuId << "    "
+                        << screens[i].currentLine << " / " 
+                        << screens[i].totalLines << "\n";
                 }
+                }
+
                 std::cout << "\nFinished processes:\n------------------------------\n";
+                for (size_t i = 0; i < screens.size(); ++i)
+                {
+                    if(screens[i].currentLine == screens[i].totalLines){
+                        std::cout << "process" << i << "  " 
+                        << screens[i].createdDate << "    " 
+                        << "Finished " << "    "
+                        << screens[i].currentLine << " / " 
+                        << screens[i].totalLines << "\n";
+                    }
+                }
             }
         }
         else if (command[0] == "generate")
