@@ -48,6 +48,7 @@ struct Screen
     int currentLine;
     int totalLines;
     std::string createdDate;
+    std::string finishedDate;
     std::string name;
 };
 
@@ -134,6 +135,7 @@ void cpuWorker(int coreId)
                         << " \"Hello world from " << screen->name << "!\"\n";
                 outFile.close();
             }
+            
         }
     }
 }
@@ -270,7 +272,8 @@ int main()
                 std::cout << "------------------------------\nRunning processes:\n";
                 for (size_t i = 0; i < screens.size(); ++i)
                 {
-                    if(screens[i].currentLine < screens[i].totalLines){
+
+                    if( screens[i].currentLine != 0&& screens[i].currentLine < screens[i].totalLines){
                         std::cout << "process" << i << "  " 
                         << screens[i].createdDate << "    " 
                         << "Core " << screens[i].cpuId << "    "
