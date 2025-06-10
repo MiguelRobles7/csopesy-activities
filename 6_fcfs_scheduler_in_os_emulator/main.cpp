@@ -122,6 +122,7 @@ void cpuWorker(int coreId)
             std::string now = getCurrentDateTime();
             std::string filename = output_dir + "/" + screen->name + ".txt";
             std::ofstream outFile(filename, std::ios::app);
+            screen->cpuId = coreId;
             if (outFile.is_open())
             {
                 if(!headerPrinted) {
