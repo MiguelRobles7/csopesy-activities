@@ -49,6 +49,8 @@ struct Screen
     int totalLines;
     std::string createdDate;
     std::string name;
+    std::string lastLogTime;  
+    std::string finishedTime;  
 };
 
 Screen createScreen(std::string name)
@@ -120,6 +122,7 @@ void cpuWorker(int coreId)
             screen->currentLine++;
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             std::string now = getCurrentDateTime();
+            screen->lastLogTime = now;
             std::string filename = output_dir + "/" + screen->name + ".txt";
             std::ofstream outFile(filename, std::ios::app);
             screen->cpuId = coreId;
@@ -135,6 +138,7 @@ void cpuWorker(int coreId)
                 outFile.close();
             }
         }
+        screen->finishedTime = getCurrentDateTime();
     }
 }
 
@@ -272,7 +276,7 @@ int main()
                 {
                     if(screens[i].currentLine < screens[i].totalLines){
                         std::cout << "process" << i << "  " 
-                        << screens[i].createdDate << "    " 
+                        << screens[i].lastLogTime << "    " 
                         << "Core " << screens[i].cpuId << "    "
                         << screens[i].currentLine << " / " 
                         << screens[i].totalLines << "\n";
@@ -284,7 +288,7 @@ int main()
                 {
                     if(screens[i].currentLine == screens[i].totalLines){
                         std::cout << "process" << i << "  " 
-                        << screens[i].createdDate << "    " 
+                        << screens[i].finishedTime << "    "
                         << "Finished " << "    "
                         << screens[i].currentLine << " / " 
                         << screens[i].totalLines << "\n";
