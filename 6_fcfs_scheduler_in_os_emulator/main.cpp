@@ -274,7 +274,7 @@ int main()
                 std::cout << "------------------------------\nRunning processes:\n";
                 for (size_t i = 0; i < screens.size(); ++i)
                 {
-                    if(screens[i].currentLine < screens[i].totalLines){
+                    if (screens[i].currentLine > 0 && screens[i].currentLine < screens[i].totalLines){
                         std::cout << "process" << i << "  " 
                         << screens[i].lastLogTime << "    " 
                         << "Core " << screens[i].cpuId << "    "
@@ -288,8 +288,8 @@ int main()
                 {
                     if(screens[i].currentLine == screens[i].totalLines){
                         std::cout << "process" << i << "  " 
-                        << screens[i].finishedTime << "    "
-                        << "Finished " << "    "
+                        << (screens[i].finishedTime.empty() ? "Getting finishing time..." : screens[i].finishedTime) << "    " 
+                        << "Finished    "
                         << screens[i].currentLine << " / " 
                         << screens[i].totalLines << "\n";
                     }
