@@ -7,10 +7,12 @@
 #include <cstdlib>
 #include <vector>
 #include <random>
+#include <sstream>
 #include <fstream>
 #include <thread>
 #include <mutex>
 #include <queue>
+#include <filesystem>
 #include <condition_variable>
 
 std::thread printThread;
@@ -204,6 +206,9 @@ int main()
     Screen mainMenu;
     mainMenu.name = "Main Menu";
     currentScreen = mainMenu;
+    std::string report_file_name = "csopesy-log.txt";
+    std::string report_util;
+    std::ostringstream report_stream;
 
     while (true)
     {
@@ -273,11 +278,11 @@ int main()
             }
             else if (command[1] == "-ls")
             {
-                std::cout << "------------------------------\nRunning processes:\n";
+                report_stream << "------------------------------\nRunning processes:\n";
                 for (size_t i = 0; i < screens.size(); ++i)
                 {
                     if (screens[i].currentLine > 0 && screens[i].currentLine < screens[i].totalLines){
-                        std::cout << "process" << i << "  " 
+                        report_stream << "process" << i << "  " 
                         << screens[i].lastLogTime << "    " 
                         << "Core " << screens[i].cpuId << "    "
                         << screens[i].currentLine << " / " 
@@ -285,18 +290,24 @@ int main()
                     }
                 }
 
-                std::cout << "\nFinished processes:\n"; 
+                report_stream << "\nFinished processes:\n"; 
                 for (size_t i = 0; i < screens.size(); ++i)
                 {
                     if(screens[i].currentLine == screens[i].totalLines){
-                        std::cout << "process" << i << "  " 
+                        report_stream << "process" << i << "  " 
                         << (screens[i].finishedTime.empty() ? "Getting finishing time..." : screens[i].finishedTime) << "    " 
                         << "Finished    "
                         << screens[i].currentLine << " / " 
                         << screens[i].totalLines << "\n";
                     }
                 }
-                std::cout << "------------------------------\n";
+                report_stream << "------------------------------\n";
+                
+                // Save report to local
+                report_util = report_stream.str();
+
+                // Print report
+                std::cout << report_util;
             }
         }
         else if (command[0] == "generate") // TODO: implement this in scheduler-start
@@ -315,6 +326,13 @@ int main()
                 std::cout << "Generated " << command[1] << " processes!\n";
             }
         }
+        else if (command[0] == "report-util") {
+            namespace fs = std::filesystem;
+            std::ofstream writeReport(report_file_name);
+            writeReport << report_util;
+            writeReport.close();
+            std::cout << "Report generated at " << fs::path(report_file_name) << "!\n";
+        }
         else if (command[0] == "print")
         {
             if (isPrinting)
@@ -329,7 +347,7 @@ int main()
                 //std::cout << "⏳ Print job started in background.\n";
             }
         }
-        else if ((command[0] == "initialize" || command[0] == "scheduler-test" || command[0] == "scheduler-stop" || command[0] == "report-util") && currentScreen.name == "Main Menu")
+        else if ((command[0] == "initialize" || command[0] == "scheduler-test" || command[0] == "scheduler-stop" ) && currentScreen.name == "Main Menu")
         {
             std::cout << command[0] << " command recognized. Doing something.\n";
         }
