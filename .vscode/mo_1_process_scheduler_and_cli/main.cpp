@@ -329,6 +329,8 @@ int main()
 
                 // Print report
                 std::cout << report_util;
+
+                report_stream.clear();
             }
         }
         else if (command[0] == "generate") // TODO: implement this in scheduler-start
@@ -347,13 +349,14 @@ int main()
                 std::cout << "Generated " << command[1] << " processes!\n";
             }
         }
-        else if (command[0] == "report-util")
+        else if (command[0] == "report-util") 
         {
             namespace fs = std::filesystem;
             std::ofstream writeReport(report_file_name);
             writeReport << report_util;
             writeReport.close();
             std::cout << "Report generated at " << fs::path(report_file_name) << "!\n";
+            report_util.clear(); 
         }
         else if (command[0] == "print")
         {
