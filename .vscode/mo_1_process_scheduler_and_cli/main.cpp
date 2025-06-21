@@ -52,8 +52,8 @@ struct Screen
     std::string createdDate;
     std::string finishedDate;
     std::string name;
-    std::string lastLogTime;  
-    std::string finishedTime;  
+    std::string lastLogTime;
+    std::string finishedTime;
 };
 
 Screen createScreen(std::string name)
@@ -114,13 +114,14 @@ void cpuWorker(int coreId)
         Screen *screen = readyQueue.front();
         readyQueue.pop();
         lock.unlock();
-        //std::cout << "[Core " << coreId << "] Executing " << screen->name << "\n";
+        // std::cout << "[Core " << coreId << "] Executing " << screen->name << "\n";
 
         bool headerPrinted = false;
 
         for (int i = 0; i < screen->totalLines; ++i)
         {
-            if(i==0) headerPrinted = false;
+            if (i == 0)
+                headerPrinted = false;
 
             screen->currentLine++;
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -131,7 +132,8 @@ void cpuWorker(int coreId)
             screen->cpuId = coreId;
             if (outFile.is_open())
             {
-                if(!headerPrinted) {
+                if (!headerPrinted)
+                {
                     outFile << "Process name: " << screen->name << "\nLogs:\n\n";
                     headerPrinted = true;
                 }
@@ -140,7 +142,6 @@ void cpuWorker(int coreId)
                         << " \"Hello world from " << screen->name << "!\"\n";
                 outFile.close();
             }
-            
         }
         screen->finishedTime = getCurrentDateTime();
     }
@@ -194,7 +195,7 @@ void startPrintJob(std::vector<Screen> &screens)
     }
 
     isPrinting = false;
-    //std::cout << "✅ Print job completed. Logs saved in: " << output_dir << "\n";
+    // std::cout << "✅ Print job completed. Logs saved in: " << output_dir << "\n";
 }
 
 int main()
@@ -278,31 +279,51 @@ int main()
             }
             else if (command[1] == "-ls")
             {
+                // Count active/running processes
+                int activeCores = 0;
+                for (const auto &s : screens)
+                {
+                    if (s.currentLine > 0 && s.currentLine < s.totalLines)
+                        activeCores++;
+                }
+
+                int totalCores = CPU_CORES;
+                int availableCores = totalCores - activeCores;
+                float utilization = (static_cast<float>(activeCores) / totalCores) * 100.0f;
+
+                // Write CPU stats
+                report_stream << "CPU Utilization: " << std::fixed << std::setprecision(2) << utilization << "%\n";
+                report_stream << "Cores Used: " << activeCores << "\n";
+                report_stream << "Cores Available: " << availableCores << "\n\n";
+
+                // Generate Report
                 report_stream << "------------------------------\nRunning processes:\n";
                 for (size_t i = 0; i < screens.size(); ++i)
                 {
-                    if (screens[i].currentLine > 0 && screens[i].currentLine < screens[i].totalLines){
-                        report_stream << "process" << i << "  " 
-                        << screens[i].lastLogTime << "    " 
-                        << "Core " << screens[i].cpuId << "    "
-                        << screens[i].currentLine << " / " 
-                        << screens[i].totalLines << "\n";
+                    if (screens[i].currentLine > 0 && screens[i].currentLine < screens[i].totalLines)
+                    {
+                        report_stream << "process" << i << "  "
+                                      << screens[i].lastLogTime << "    "
+                                      << "Core " << screens[i].cpuId << "    "
+                                      << screens[i].currentLine << " / "
+                                      << screens[i].totalLines << "\n";
                     }
                 }
 
-                report_stream << "\nFinished processes:\n"; 
+                report_stream << "\nFinished processes:\n";
                 for (size_t i = 0; i < screens.size(); ++i)
                 {
-                    if(screens[i].currentLine == screens[i].totalLines){
-                        report_stream << "process" << i << "  " 
-                        << (screens[i].finishedTime.empty() ? "Getting finishing time..." : screens[i].finishedTime) << "    " 
-                        << "Finished    "
-                        << screens[i].currentLine << " / " 
-                        << screens[i].totalLines << "\n";
+                    if (screens[i].currentLine == screens[i].totalLines)
+                    {
+                        report_stream << "process" << i << "  "
+                                      << (screens[i].finishedTime.empty() ? "Getting finishing time..." : screens[i].finishedTime) << "    "
+                                      << "Finished    "
+                                      << screens[i].currentLine << " / "
+                                      << screens[i].totalLines << "\n";
                     }
                 }
                 report_stream << "------------------------------\n";
-                
+
                 // Save report to local
                 report_util = report_stream.str();
 
@@ -326,7 +347,8 @@ int main()
                 std::cout << "Generated " << command[1] << " processes!\n";
             }
         }
-        else if (command[0] == "report-util") {
+        else if (command[0] == "report-util")
+        {
             namespace fs = std::filesystem;
             std::ofstream writeReport(report_file_name);
             writeReport << report_util;
@@ -337,17 +359,17 @@ int main()
         {
             if (isPrinting)
             {
-                //std::cout << "Print job already running.\n";
+                // std::cout << "Print job already running.\n";
             }
             else
             {
                 stopScheduler = false; // reset in case of re-run
                 printThread = std::thread(startPrintJob, std::ref(screens));
                 printThread.detach(); // run in background
-                //std::cout << "⏳ Print job started in background.\n";
+                // std::cout << "⏳ Print job started in background.\n";
             }
         }
-        else if ((command[0] == "initialize" || command[0] == "scheduler-test" || command[0] == "scheduler-stop" ) && currentScreen.name == "Main Menu")
+        else if ((command[0] == "initialize" || command[0] == "scheduler-test" || command[0] == "scheduler-stop") && currentScreen.name == "Main Menu")
         {
             std::cout << command[0] << " command recognized. Doing something.\n";
         }
