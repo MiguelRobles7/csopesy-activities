@@ -200,6 +200,9 @@ void startPrintJob(std::vector<Screen> &screens)
 
 int main()
 {
+    bool isInitialized = false; // TODO: Accept no command if "initialize" wasn't run yet. Yes, including exit.
+    // TODO: Read config file and store said parameters. Replace any that can be used from FCFS implementation.
+    // Said parameters are crucial and relevant to scheduling. 
     printHeader();
     std::string cmd;
     std::vector<Screen> screens;
@@ -225,6 +228,8 @@ int main()
             command.push_back(token);
         }
 
+        // Command processing
+        // TODO: "scheduler-start" and "scheduler-stop"
         if (command.empty())
         {
             continue;
@@ -250,7 +255,7 @@ int main()
         }
         else if (command[0] == "screen" && (command.size() == 3 || command.size() == 2) && currentScreen.name == "Main Menu")
         {
-            if (command[1] == "-s")
+            if (command[1] == "-s") // TODO: Screen specific commands: "exit" and "process-smi"
             {
                 Screen newScreen = createScreen(command[2]);
                 screens.push_back(newScreen);
