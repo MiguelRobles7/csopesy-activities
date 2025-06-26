@@ -19,6 +19,12 @@ std::thread printThread;
 bool isPrinting = false;
 
 int CPU_CORES = 4;
+int quantum = 5;
+int batchFreq = 1;
+int minInstructions = 5;
+int maxInstructions = 10;
+int delayPerExec = 100;
+std::string schedulerAlgo = "fcfs";
 std::string output_dir = "./";
 
 int getRand(int min, int max)
@@ -198,9 +204,50 @@ void startPrintJob(std::vector<Screen> &screens)
     // std::cout << "✅ Print job completed. Logs saved in: " << output_dir << "\n";
 }
 
+void readConfigFile(const std::string& filename) {
+    std::ifstream file(filename);
+    if (!file) {
+        std::cerr << "Error opening " << filename << "\n";
+        return;
+    }
+
+    std::string param;
+    std::cout << "Loaded config parameters:\n";
+
+    while (file >> param) {
+        if (param == "num-cpu") {
+            file >> CPU_CORES;
+            std::cout << " - num-cpu: " << CPU_CORES << "\n";
+        } else if (param == "scheduler") {
+            file >> schedulerAlgo;
+            std::cout << " - scheduler: " << schedulerAlgo << "\n";
+        } else if (param == "quantum-cycles") {
+            file >> quantum;
+            std::cout << " - quantum-cycles: " << quantum << "\n";
+        } else if (param == "batch-process-freq") {
+            file >> batchFreq;
+            std::cout << " - batch-process-freq: " << batchFreq << "\n";
+        } else if (param == "min-ins") {
+            file >> minInstructions;
+            std::cout << " - min-ins: " << minInstructions << "\n";
+        } else if (param == "max-ins") {
+            file >> maxInstructions;
+            std::cout << " - max-ins: " << maxInstructions << "\n";
+        } else if (param == "delay-per-exec") {
+            file >> delayPerExec;
+            std::cout << " - delay-per-exec: " << delayPerExec << "\n";
+        } else {
+            std::string junk;
+            file >> junk;
+            std::cout << "Unknown config parameter: " << param << " = " << junk << "\n";
+        }
+    }
+}
+
+
 int main()
 {
-    bool isInitialized = false; // TODO: Accept no command if "initialize" wasn't run yet. Yes, including exit.
+    bool isInitialized = false; 
     // TODO: Read config file and store said parameters. Replace any that can be used from FCFS implementation.
     // Said parameters are crucial and relevant to scheduling. 
     printHeader();
@@ -383,8 +430,9 @@ int main()
         }
         else if ((command[0] == "initialize"))
         {
-            isInitialized = true;
             std::cout << command[0] << " command recognized. Doing something.\n";
+            readConfigFile("config.txt");
+            isInitialized = true;
         }
         else if ((command[0] == "scheduler-test" || command[0] == "scheduler-stop") && currentScreen.name == "Main Menu")
         {
