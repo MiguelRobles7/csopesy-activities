@@ -228,6 +228,10 @@ int main()
             command.push_back(token);
         }
 
+        if (!isInitialized && !(command[0] == "initialize")) {
+            std::cout << "Please run the 'initialize' command first.\n";
+            continue;
+        }
         // Command processing
         // TODO: "scheduler-start" and "scheduler-stop"
         if (command.empty())
@@ -377,7 +381,12 @@ int main()
                 // std::cout << "⏳ Print job started in background.\n";
             }
         }
-        else if ((command[0] == "initialize" || command[0] == "scheduler-test" || command[0] == "scheduler-stop") && currentScreen.name == "Main Menu")
+        else if ((command[0] == "initialize"))
+        {
+            isInitialized = true;
+            std::cout << command[0] << " command recognized. Doing something.\n";
+        }
+        else if ((command[0] == "scheduler-test" || command[0] == "scheduler-stop") && currentScreen.name == "Main Menu")
         {
             std::cout << command[0] << " command recognized. Doing something.\n";
         }
