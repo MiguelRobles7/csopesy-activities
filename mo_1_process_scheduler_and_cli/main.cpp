@@ -193,10 +193,14 @@ void cpuWorker(int coreId) {
                         logEntry = "Declared " + inst.var1 + " = " + std::to_string(inst.value);
                         break;
                     case InstructionType::PRINT:
-                        logEntry = inst.message;
-                        logEntry += execScreen->memory.vars.count(inst.var1)
-                            ? std::to_string(execScreen->memory.vars[inst.var1])
-                            : std::string("undefined");
+                        if (inst.message.find("Hello world from") != std::string::npos) {
+                            logEntry = inst.message;
+                        } else {
+                            logEntry = inst.message;
+                            logEntry += execScreen->memory.vars.count(inst.var1)
+                                ? std::to_string(execScreen->memory.vars[inst.var1])
+                                : std::string("undefined");
+                        }
                         break;
                     case InstructionType::ADD: {
                         uint16_t a = execScreen->memory.vars[inst.var2];
@@ -253,11 +257,16 @@ void cpuWorker(int coreId) {
                         logEntry = "Declared " + inst.var1 + " = " + std::to_string(inst.value);
                         break;
                     case InstructionType::PRINT:
-                        logEntry = inst.message;
-                        logEntry += execScreen->memory.vars.count(inst.var1)
-                            ? std::to_string(execScreen->memory.vars[inst.var1])
-                            : std::string("undefined");
+                        if (inst.message.find("Hello world from") != std::string::npos) {
+                            logEntry = inst.message;
+                        } else {
+                            logEntry = inst.message;
+                            logEntry += execScreen->memory.vars.count(inst.var1)
+                                ? std::to_string(execScreen->memory.vars[inst.var1])
+                                : std::string("undefined");
+                        }
                         break;
+
                     case InstructionType::ADD: {
                         uint16_t a = execScreen->memory.vars[inst.var2];
                         uint16_t b = execScreen->memory.vars[inst.var3];
@@ -385,7 +394,7 @@ void readConfigFile(const std::string& filename) {
     }
 }
 
-std::vector<Instruction> generateRandomInstructions(int count) {
+std::vector<Instruction> generateRandomInstructions(int count, const std::string& processName = "") {
     std::vector<Instruction> instructions;
     std::vector<std::string> vars = {"x", "y", "z"};
 
@@ -402,7 +411,7 @@ std::vector<Instruction> generateRandomInstructions(int count) {
         case 1: { // PRINT
             Instruction inst{InstructionType::PRINT};
             inst.var1 = vars[getRand(0, 2)];
-            inst.message = "Value from: ";
+            inst.message = "Hello world from " + processName + "!";
             instructions.push_back(inst);
             break;
         }
@@ -488,7 +497,7 @@ int main()
                         ExecutableScreen exec{};
                         exec.name = "p" + std::to_string(nextPid++);
                         exec.instructions = generateRandomInstructions(
-                                            getRand(minInstructions, maxInstructions));
+                                            getRand(minInstructions, maxInstructions), exec.name);
                         exec.totalLines    = exec.instructions.size();
                         exec.createdDate   = getCurrentDateTime();
 
@@ -694,7 +703,7 @@ int main()
                 ExecutableScreen proc = createScreen(pname);
                 // ← assign real instructions here:
                 proc.instructions = generateRandomInstructions(
-                                    getRand(minInstructions, maxInstructions));
+                                    getRand(minInstructions, maxInstructions), pname);
                 // optional: make totalLines match actual instruction count
                 proc.totalLines = static_cast<int>(proc.instructions.size());
                 {
