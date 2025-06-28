@@ -117,6 +117,8 @@ ExecutableScreen createScreen(std::string name)
 {
     ExecutableScreen newScreen;
     newScreen.cpuId = 0;
+    newScreen.memory.vars["x"] = 0;
+    newScreen.cpuId = 0;
     newScreen.currentLine = 0;
     newScreen.totalLines = 100;
     newScreen.createdDate = getCurrentDateTime();
@@ -205,9 +207,12 @@ void cpuWorker(int coreId) {
                         break;
                     case InstructionType::ADD: {
                         uint16_t a = execScreen->memory.vars[inst.var2];
-                        uint16_t b = execScreen->memory.vars[inst.var3];
+                        uint16_t b = inst.var3.empty()
+                                    ? inst.value
+                                    : execScreen->memory.vars[inst.var3];
                         execScreen->memory.vars[inst.var1] = a + b;
-                        logEntry = "Added: " + inst.var1 + " = " + std::to_string(execScreen->memory.vars[inst.var1]);
+                        logEntry = "Added: " + inst.var1
+                                + " = " + std::to_string(execScreen->memory.vars[inst.var1]);
                         break;
                     }
                     case InstructionType::SUBTRACT: {
@@ -270,9 +275,12 @@ void cpuWorker(int coreId) {
 
                     case InstructionType::ADD: {
                         uint16_t a = execScreen->memory.vars[inst.var2];
-                        uint16_t b = execScreen->memory.vars[inst.var3];
+                        uint16_t b = inst.var3.empty()
+                                    ? inst.value
+                                    : execScreen->memory.vars[inst.var3];
                         execScreen->memory.vars[inst.var1] = a + b;
-                        logEntry = "Added: " + inst.var1 + " = " + std::to_string(execScreen->memory.vars[inst.var1]);
+                        logEntry = "Added: " + inst.var1
+                                + " = " + std::to_string(execScreen->memory.vars[inst.var1]);
                         break;
                     }
                     case InstructionType::SUBTRACT: {
@@ -395,52 +403,27 @@ void readConfigFile(const std::string& filename) {
     }
 }
 
-std::vector<Instruction> generateRandomInstructions(int count, const std::string& processName = "") {
+std::vector<Instruction> generateRandomInstructions(int count) {
     std::vector<Instruction> instructions;
-    std::vector<std::string> vars = {"x", "y", "z"};
+    instructions.reserve(count);
 
     for (int i = 0; i < count; ++i) {
-        int type = getRand(0, 4);
-        switch (type) {
-        case 0: { // DECLARE
-            Instruction inst{InstructionType::DECLARE};
-            inst.var1 = vars[getRand(0, 2)];
-            inst.value = getRand(1, 100);
+        if (i % 2 == 0) {
+            // even index → PRINT
+            Instruction inst{ InstructionType::PRINT };
+            inst.var1    = "x";
+            inst.message = "Value from: ";
             instructions.push_back(inst);
-            break;
-        }
-        case 1: { // PRINT
-            Instruction inst{InstructionType::PRINT};
-            inst.var1 = vars[getRand(0, 2)];
-            inst.message = "Hello world from " + processName + "!";
+        } else {
+            // odd index → ADD(x, x, [1–10])
+            Instruction inst{ InstructionType::ADD };
+            inst.var1 = "x";
+            inst.var2 = "x";
+            inst.value = getRand(1, 10);
+            // leave inst.var3 empty so we know to use inst.value
             instructions.push_back(inst);
-            break;
-        }
-        case 2: { // ADD
-            Instruction inst{InstructionType::ADD};
-            inst.var1 = vars[getRand(0, 2)];
-            inst.var2 = vars[getRand(0, 2)];
-            inst.var3 = vars[getRand(0, 2)];
-            instructions.push_back(inst);
-            break;
-        }
-        case 3: { // SUBTRACT
-            Instruction inst{InstructionType::SUBTRACT};
-            inst.var1 = vars[getRand(0, 2)];
-            inst.var2 = vars[getRand(0, 2)];
-            inst.var3 = vars[getRand(0, 2)];
-            instructions.push_back(inst);
-            break;
-        }
-        case 4: { // SLEEP
-            Instruction inst{InstructionType::SLEEP};
-            inst.sleepTicks = getRand(1, 3);
-            instructions.push_back(inst);
-            break;
-        }
         }
     }
-
     return instructions;
 }
 
@@ -498,20 +481,20 @@ int main()
                         ExecutableScreen exec{};
                         exec.name = "p" + std::to_string(nextPid++);
                         exec.instructions = generateRandomInstructions(
-                                            getRand(minInstructions, maxInstructions), exec.name);
+                                            getRand(minInstructions, maxInstructions));
                         exec.totalLines    = exec.instructions.size();
                         exec.createdDate   = getCurrentDateTime();
 
                         {
-                        std::lock_guard<std::mutex> lg(screensMutex);
-                        screens.push_back(std::move(exec));
-                        // **Immediately** enqueue the new process:
-                        ExecutableScreen* p = &screens.back();
-                        {
-                            std::lock_guard<std::mutex> ql(queueMutex);
-                            readyQueue.push(p);
-                        }
-                        cv.notify_one();
+                            std::lock_guard<std::mutex> lg(screensMutex);
+                            screens.push_back(std::move(exec));
+                            // **Immediately** enqueue the new process:
+                            ExecutableScreen* p = &screens.back();
+                            {
+                                std::lock_guard<std::mutex> ql(queueMutex);
+                                readyQueue.push(p);
+                            }
+                            cv.notify_one();
                         }
 
                         std::this_thread::sleep_for(
@@ -720,7 +703,7 @@ int main()
                 ExecutableScreen proc = createScreen(pname);
                 // ← assign real instructions here:
                 proc.instructions = generateRandomInstructions(
-                                    getRand(minInstructions, maxInstructions), pname);
+                                    getRand(minInstructions, maxInstructions));
                 // optional: make totalLines match actual instruction count
                 proc.totalLines = static_cast<int>(proc.instructions.size());
                 {
