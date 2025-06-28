@@ -16,6 +16,7 @@
 #include <condition_variable>
 #include <atomic>
 #include <mutex>
+#include <deque>
 
 std::atomic<bool> schedulerRunning(false);
 std::thread       schedulerGeneratorThread;
@@ -43,7 +44,7 @@ int delayPerExec = 100;
 std::string schedulerAlgo = "fcfs";
 std::string output_dir = "./";
 
-std::vector<std::thread> cpuThreads;
+std::deque<std::thread> cpuThreads;
 
 int getRand(int min, int max)
 {
@@ -303,7 +304,7 @@ void cpuWorker(int coreId) {
     }
 }
 
-void schedulerThreadFunc(std::vector<ExecutableScreen> &screens)
+void schedulerThreadFunc(std::deque<ExecutableScreen> &screens)
 {
     for (auto &screen : screens)
     {
@@ -315,7 +316,7 @@ void schedulerThreadFunc(std::vector<ExecutableScreen> &screens)
     }
 }
 
-void startPrintJob(std::vector<ExecutableScreen> &screens)
+void startPrintJob(std::deque<ExecutableScreen> &screens)
 {
     isPrinting = true;
     std::thread scheduler(schedulerThreadFunc, std::ref(screens));
@@ -451,7 +452,7 @@ int main()
     // Said parameters are crucial and relevant to scheduling. 
     printHeader();
     std::string cmd;
-    std::vector<ExecutableScreen> screens;
+    std::deque<ExecutableScreen> screens;
     ExecutableScreen currentScreen;
     ExecutableScreen mainMenu;
     mainMenu.name = "Main Menu";
