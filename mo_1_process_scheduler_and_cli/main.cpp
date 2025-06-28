@@ -164,15 +164,13 @@ void cpuWorker(int coreId) {
         if (stopScheduler && readyQueue.empty())
             break;
 
-        // Pop the next screen and cast to ExecutableScreen
-        Screen* baseScreen = readyQueue.front();
+        // Pop the next process
+        ExecutableScreen* execScreen = readyQueue.front();
         readyQueue.pop();
         lock.unlock();
-        ExecutableScreen* execScreen = dynamic_cast<ExecutableScreen*>(baseScreen);
-        if (!execScreen)
-            continue;
+        if (!execScreen) continue;
 
-        // Initialize log file with header once
+        // Initialize log header if first time
         {
             std::ofstream headerOut(output_dir + "/" + execScreen->name + ".txt", std::ios::app);
             if (headerOut.is_open()) {
@@ -180,70 +178,118 @@ void cpuWorker(int coreId) {
             }
         }
 
-        // Execute instructions sequentially
-        while (execScreen->instructionPointer < execScreen->instructions.size()) {
-            Instruction& inst = execScreen->instructions[execScreen->instructionPointer];
-            std::string logEntry;
-
-            switch (inst.type) {
-                case InstructionType::DECLARE:
-                    execScreen->memory.vars[inst.var1] = inst.value;
-                    logEntry = "Declared " + inst.var1 + " = " + std::to_string(inst.value);
-                    break;
-
-                case InstructionType::PRINT: {
-                    logEntry = inst.message;
-                    if (execScreen->memory.vars.count(inst.var1)) {
-                        logEntry += std::to_string(execScreen->memory.vars[inst.var1]);
-                    } else {
-                        logEntry += "undefined";
+        // Choose scheduling algorithm
+        if (schedulerAlgo == "rr") {
+            // Round-Robin: execute up to 'quantum' instructions then requeue
+            int slice = quantum;
+            while (slice > 0 && execScreen->instructionPointer < (int)execScreen->instructions.size()) {
+                Instruction& inst = execScreen->instructions[execScreen->instructionPointer];
+                std::string logEntry;
+                // --- Instruction handling (same as FCFS) ---
+                switch (inst.type) {
+                    case InstructionType::DECLARE:
+                        execScreen->memory.vars[inst.var1] = inst.value;
+                        logEntry = "Declared " + inst.var1 + " = " + std::to_string(inst.value);
+                        break;
+                    case InstructionType::PRINT:
+                        logEntry = inst.message;
+                        logEntry += execScreen->memory.vars.count(inst.var1)
+                            ? std::to_string(execScreen->memory.vars[inst.var1])
+                            : std::string("undefined");
+                        break;
+                    case InstructionType::ADD: {
+                        uint16_t a = execScreen->memory.vars[inst.var2];
+                        uint16_t b = execScreen->memory.vars[inst.var3];
+                        execScreen->memory.vars[inst.var1] = a + b;
+                        logEntry = "Added: " + inst.var1 + " = " + std::to_string(execScreen->memory.vars[inst.var1]);
+                        break;
                     }
-                    break;
+                    case InstructionType::SUBTRACT: {
+                        uint16_t a = execScreen->memory.vars[inst.var2];
+                        uint16_t b = execScreen->memory.vars[inst.var3];
+                        execScreen->memory.vars[inst.var1] = a - b;
+                        logEntry = "Subtracted: " + inst.var1 + " = " + std::to_string(execScreen->memory.vars[inst.var1]);
+                        break;
+                    }
+                    case InstructionType::SLEEP:
+                        std::this_thread::sleep_for(std::chrono::milliseconds(inst.sleepTicks * delayPerExec));
+                        logEntry = "Slept for " + std::to_string(inst.sleepTicks) + " ticks.";
+                        break;
+                    default:
+                        break;
                 }
+                // --- End instruction handling ---
 
-                case InstructionType::ADD: {
-                    uint16_t a = execScreen->memory.vars[inst.var2];
-                    uint16_t b = execScreen->memory.vars[inst.var3];
-                    execScreen->memory.vars[inst.var1] = a + b;
-                    logEntry = "Added: " + inst.var1 + " = " + std::to_string(execScreen->memory.vars[inst.var1]);
-                    break;
+                // Update metadata and log
+                execScreen->instructionPointer++;
+                execScreen->currentLine++;
+                execScreen->cpuId = coreId;
+                execScreen->lastLogTime = getCurrentDateTime();
+                std::ofstream outFile(output_dir + "/" + execScreen->name + ".txt", std::ios::app);
+                if (outFile.is_open()) {
+                    outFile << "(" << execScreen->lastLogTime << ") Core:" << coreId << " " << logEntry << "\n";
                 }
-
-                case InstructionType::SUBTRACT: {
-                    uint16_t a = execScreen->memory.vars[inst.var2];
-                    uint16_t b = execScreen->memory.vars[inst.var3];
-                    execScreen->memory.vars[inst.var1] = a - b;
-                    logEntry = "Subtracted: " + inst.var1 + " = " + std::to_string(execScreen->memory.vars[inst.var1]);
-                    break;
-                }
-
-                case InstructionType::SLEEP:
-                    std::this_thread::sleep_for(std::chrono::milliseconds(inst.sleepTicks * delayPerExec));
-                    logEntry = "Slept for " + std::to_string(inst.sleepTicks) + " ticks.";
-                    break;
-
-                default:
-                    break;
+                std::this_thread::sleep_for(std::chrono::milliseconds(delayPerExec));
+                slice--;
             }
-
-            // Update execution metadata
-            execScreen->currentLine++;
-            execScreen->cpuId = coreId;
-            execScreen->lastLogTime = getCurrentDateTime();
-
-            // Append log entry to file
-            std::ofstream outFile(output_dir + "/" + execScreen->name + ".txt", std::ios::app);
-            if (outFile.is_open()) {
-                outFile << "(" << execScreen->lastLogTime << ") Core:" << coreId << " " << logEntry << "\n";
+            if (execScreen->instructionPointer < (int)execScreen->instructions.size()) {
+                // not finished: re-enqueue for next round
+                std::lock_guard<std::mutex> requeueLock(queueMutex);
+                readyQueue.push(execScreen);
+                cv.notify_one();
+            } else {
+                execScreen->finishedTime = getCurrentDateTime();
             }
-
-            // Advance instruction pointer and simulate execution delay
-            execScreen->instructionPointer++;
-            std::this_thread::sleep_for(std::chrono::milliseconds(delayPerExec));
+        } else {
+            // FCFS: execute until completion
+            while (execScreen->instructionPointer < (int)execScreen->instructions.size()) {
+                Instruction& inst = execScreen->instructions[execScreen->instructionPointer];
+                std::string logEntry;
+                // [Same instruction handling switch as above]
+                switch (inst.type) {
+                    case InstructionType::DECLARE:
+                        execScreen->memory.vars[inst.var1] = inst.value;
+                        logEntry = "Declared " + inst.var1 + " = " + std::to_string(inst.value);
+                        break;
+                    case InstructionType::PRINT:
+                        logEntry = inst.message;
+                        logEntry += execScreen->memory.vars.count(inst.var1)
+                            ? std::to_string(execScreen->memory.vars[inst.var1])
+                            : std::string("undefined");
+                        break;
+                    case InstructionType::ADD: {
+                        uint16_t a = execScreen->memory.vars[inst.var2];
+                        uint16_t b = execScreen->memory.vars[inst.var3];
+                        execScreen->memory.vars[inst.var1] = a + b;
+                        logEntry = "Added: " + inst.var1 + " = " + std::to_string(execScreen->memory.vars[inst.var1]);
+                        break;
+                    }
+                    case InstructionType::SUBTRACT: {
+                        uint16_t a = execScreen->memory.vars[inst.var2];
+                        uint16_t b = execScreen->memory.vars[inst.var3];
+                        execScreen->memory.vars[inst.var1] = a - b;
+                        logEntry = "Subtracted: " + inst.var1 + " = " + std::to_string(execScreen->memory.vars[inst.var1]);
+                        break;
+                    }
+                    case InstructionType::SLEEP:
+                        std::this_thread::sleep_for(std::chrono::milliseconds(inst.sleepTicks * delayPerExec));
+                        logEntry = "Slept for " + std::to_string(inst.sleepTicks) + " ticks.";
+                        break;
+                    default:
+                        break;
+                }
+                execScreen->instructionPointer++;
+                execScreen->currentLine++;
+                execScreen->cpuId = coreId;
+                execScreen->lastLogTime = getCurrentDateTime();
+                std::ofstream outFile(output_dir + "/" + execScreen->name + ".txt", std::ios::app);
+                if (outFile.is_open()) {
+                    outFile << "(" << execScreen->lastLogTime << ") Core:" << coreId << " " << logEntry << "\n";
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(delayPerExec));
+            }
+            execScreen->finishedTime = getCurrentDateTime();
         }
-
-        // Mark process as finished
-        execScreen->finishedTime = getCurrentDateTime();
     }
 }
 
@@ -439,17 +485,22 @@ int main()
                     int nextPid = 1;
                     while (schedulerRunning) {
                         std::string procName = "p" + std::to_string(nextPid++);
-                        auto exec = ExecutableScreen{};
+                        ExecutableScreen exec{};
                         exec.name = procName;
-                        exec.instructions = generateRandomInstructions(getRand(minInstructions, maxInstructions));
-                        exec.createdDate = getCurrentDateTime();
+                        exec.instructions  = generateRandomInstructions(
+                                                getRand(minInstructions, maxInstructions));
+                        exec.totalLines    = static_cast<int>(exec.instructions.size());
+                        exec.createdDate   = getCurrentDateTime();
+
                         {
                             std::lock_guard<std::mutex> lg(screensMutex);
                             screens.push_back(std::move(exec));
                         }
-                        std::this_thread::sleep_for(std::chrono::milliseconds(batchFreq * delayPerExec));
+                        std::this_thread::sleep_for(
+                            std::chrono::milliseconds(batchFreq * delayPerExec));
                     }
                 });
+
 
                 std::cout << "Scheduler started.\n";
             }
