@@ -14,6 +14,22 @@
 #include <queue>
 #include <filesystem>
 #include <condition_variable>
+#include <atomic>
+#include <mutex>
+
+std::atomic<bool> schedulerRunning(false);
+std::thread       schedulerGeneratorThread;
+std::mutex        screensMutex;  // guards the `screens` vector during pushes
+ 
+
+struct Config {
+    int minIns;
+    int maxIns;
+    int schedulerAlgo;
+    int quantum;
+    int batchProcessFreq;
+    int delayPerExec;
+};
 
 std::thread printThread;
 bool isPrinting = false;
@@ -284,6 +300,50 @@ int main()
         if (command.empty())
         {
             continue;
+        }
+        // TODO: improve ux
+        else if (command[0] == "scheduler-start" && currentScreen.name == "Main Menu")
+        {
+            if (!schedulerRunning)
+            {
+                schedulerRunning = true;
+
+                schedulerGeneratorThread = std::thread([&screens]() {
+                    int nextPid = 1;
+                    while (schedulerRunning)
+                    {
+                        std::string procName = "process" + std::to_string(nextPid++);
+                        Screen newProc     = createScreen(procName);
+                        {
+                            std::lock_guard<std::mutex> lg(screensMutex);
+                            screens.push_back(std::move(newProc));
+                        }
+                        std::cout << "Spawned " << procName << "\n";
+                        std::this_thread::sleep_for(
+                            std::chrono::milliseconds(batchFreq * delayPerExec));
+                    }
+                });
+                std::cout << "Scheduler started.\n";
+            }
+            else
+            {
+                std::cout << "Scheduler is already running.\n";
+            }
+        }
+        else if (command[0] == "scheduler-stop" && currentScreen.name == "Main Menu")
+        {
+            if (schedulerRunning)
+            {
+                schedulerRunning = false;
+                cv.notify_all();  // wake up any waiting CPU threads
+                if (schedulerGeneratorThread.joinable())
+                    schedulerGeneratorThread.join();
+                std::cout << "Scheduler stopped.\n";
+            }
+            else
+            {
+                std::cout << "Scheduler is not running.\n";
+            }
         }
         else if (command[0] == "exit")
         {

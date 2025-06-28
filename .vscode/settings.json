@@ -38,6 +38,21 @@
         "typeinfo": "cpp",
         "variant": "cpp",
         "streambuf": "cpp",
-        "algorithm": "cpp"
+        "algorithm": "cpp",
+        "__split_buffer": "cpp",
+        "charconv": "cpp",
+        "condition_variable": "cpp",
+        "deque": "cpp",
+        "fstream": "cpp",
+        "iomanip": "cpp",
+        "sstream": "cpp",
+        "vector": "cpp",
+        "__hash_table": "cpp",
+        "__node_handle": "cpp",
+        "array": "cpp",
+        "complex": "cpp",
+        "optional": "cpp",
+        "unordered_map": "cpp",
+        "thread": "cpp"
     }
 }
