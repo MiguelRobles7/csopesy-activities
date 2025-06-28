@@ -291,7 +291,7 @@ int main()
             command.push_back(token);
         }
 
-        if (!isInitialized && !(command[0] == "initialize")) {
+        if (!isInitialized && !(command[0] == "initialize") && command[0] != "exit") {
             std::cout << "Please run the 'initialize' command first.\n";
             continue;
         }
@@ -318,7 +318,6 @@ int main()
                             std::lock_guard<std::mutex> lg(screensMutex);
                             screens.push_back(std::move(newProc));
                         }
-                        std::cout << "Spawned " << procName << "\n";
                         std::this_thread::sleep_for(
                             std::chrono::milliseconds(batchFreq * delayPerExec));
                     }
