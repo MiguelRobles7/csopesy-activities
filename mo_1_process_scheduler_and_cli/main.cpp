@@ -43,6 +43,8 @@ int delayPerExec = 100;
 std::string schedulerAlgo = "fcfs";
 std::string output_dir = "./";
 
+std::vector<std::thread> cpuThreads;
+
 int getRand(int min, int max)
 {
     std::random_device rd;
@@ -87,7 +89,6 @@ enum class InstructionType {
     ADD,
     SUBTRACT,
     SLEEP,
-    FOR_LOOP
 };
 
 struct Instruction {
@@ -451,7 +452,7 @@ int main()
     std::ostringstream report_stream;
 
     while (true)
-    {
+    {   
         std::cout << "Enter a command: ";
         if (!std::getline(std::cin, cmd))
             break;
@@ -484,23 +485,38 @@ int main()
                 schedulerGeneratorThread = std::thread([&screens]() {
                     int nextPid = 1;
                     while (schedulerRunning) {
-                        std::string procName = "p" + std::to_string(nextPid++);
                         ExecutableScreen exec{};
-                        exec.name = procName;
-                        exec.instructions  = generateRandomInstructions(
-                                                getRand(minInstructions, maxInstructions));
-                        exec.totalLines    = static_cast<int>(exec.instructions.size());
+                        exec.name = "p" + std::to_string(nextPid++);
+                        exec.instructions = generateRandomInstructions(
+                                            getRand(minInstructions, maxInstructions));
+                        exec.totalLines    = exec.instructions.size();
                         exec.createdDate   = getCurrentDateTime();
 
                         {
-                            std::lock_guard<std::mutex> lg(screensMutex);
-                            screens.push_back(std::move(exec));
+                        std::lock_guard<std::mutex> lg(screensMutex);
+                        screens.push_back(std::move(exec));
+                        // **Immediately** enqueue the new process:
+                        ExecutableScreen* p = &screens.back();
+                        {
+                            std::lock_guard<std::mutex> ql(queueMutex);
+                            readyQueue.push(p);
                         }
+                        cv.notify_one();
+                        }
+
                         std::this_thread::sleep_for(
                             std::chrono::milliseconds(batchFreq * delayPerExec));
                     }
                 });
 
+                if (!isPrinting) {
+                    isPrinting = true;
+                    stopScheduler = false;
+                    // Spawn CPU workers once
+                    for (int i = 0; i < CPU_CORES; ++i) {
+                        cpuThreads.emplace_back(cpuWorker, i);
+                    }
+                }
 
                 std::cout << "Scheduler started.\n";
             }
@@ -513,11 +529,24 @@ int main()
         {
             if (schedulerRunning)
             {
+                // Stop generating
                 schedulerRunning = false;
-                cv.notify_all();  // wake up any waiting CPU threads
                 if (schedulerGeneratorThread.joinable())
-                    schedulerGeneratorThread.join();
-                std::cout << "Scheduler stopped.\n";
+                schedulerGeneratorThread.join();
+
+                // Tell CPU workers to quit once the queue is empty
+                {
+                std::lock_guard<std::mutex> lock(queueMutex);
+                stopScheduler = true;
+                }
+                cv.notify_all();
+
+                // Join all worker threads
+                for (auto &t : cpuThreads)
+                t.join();
+                cpuThreads.clear();
+                isPrinting = false;
+
             }
             else
             {
