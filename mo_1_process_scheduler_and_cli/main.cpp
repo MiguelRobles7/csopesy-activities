@@ -20,7 +20,7 @@
 std::atomic<bool> schedulerRunning(false);
 std::thread       schedulerGeneratorThread;
 std::mutex        screensMutex;  // guards the `screens` vector during pushes
- 
+
 
 struct Config {
     int minIns;
@@ -29,20 +29,6 @@ struct Config {
     int quantum;
     int batchProcessFreq;
     int delayPerExec;
-};
-
-enum class OpCode {
-    DECLARE,
-    ADD,
-    SUBTRACT,
-    PRINT,
-    SLEEP,
-    FOR
-};
-
-struct Instruction {
-    OpCode op;
-    std::vector<std::string> args; 
 };
 
 std::thread printThread;
@@ -63,46 +49,6 @@ int getRand(int min, int max)
     std::mt19937 gen(rd());
     std::uniform_int_distribution<> dist(min, max);
     return dist(gen);
-}
-
-Instruction genRandomInstruction(const std::string& procName) {
-    int op = getRand(0, 4); // Excludes FOR for now for simplicity
-    Instruction inst;
-    switch (op) {
-        case 0: { // DECLARE
-            inst.op = OpCode::DECLARE;
-            std::string var = "x" + std::to_string(getRand(1, 5));
-            inst.args = {var, std::to_string(getRand(1, 100))};
-            break;
-        }
-        case 1: { // ADD
-            inst.op = OpCode::ADD;
-            std::string a = "x" + std::to_string(getRand(1, 3));
-            std::string b = "x" + std::to_string(getRand(1, 3));
-            std::string c = std::to_string(getRand(1, 50));
-            inst.args = {a, b, c};
-            break;
-        }
-        case 2: { // SUBTRACT
-            inst.op = OpCode::SUBTRACT;
-            std::string a = "x" + std::to_string(getRand(1, 3));
-            std::string b = std::to_string(getRand(10, 20));
-            std::string c = "x" + std::to_string(getRand(1, 3));
-            inst.args = {a, b, c};
-            break;
-        }
-        case 3: { // PRINT
-            inst.op = OpCode::PRINT;
-            inst.args = {"\"Hello world from " + procName + "!\""};
-            break;
-        }
-        case 4: { // SLEEP
-            inst.op = OpCode::SLEEP;
-            inst.args = {std::to_string(getRand(1, 3))};
-            break;
-        }
-    }
-    return inst;
 }
 
 std::string getCurrentDateTime()
@@ -131,13 +77,43 @@ struct Screen
     std::string lastLogTime;
     std::string finishedTime;
 
-    std::unordered_map<std::string, uint16_t> variables;
-    std::vector<Instruction> instructions;
+    virtual ~Screen() = default;      // <— make it polymorphic
+
 };
 
-Screen createScreen(std::string name)
+enum class InstructionType {
+    DECLARE,
+    PRINT,
+    ADD,
+    SUBTRACT,
+    SLEEP,
+    FOR_LOOP
+};
+
+struct Instruction {
+    InstructionType type;
+    std::string var1, var2, var3;
+    std::string message;
+    uint16_t value = 0;
+    uint8_t sleepTicks = 0;
+    std::vector<Instruction> subInstructions;
+    int repeatCount = 1;
+};
+
+struct ProcessMemory {
+    std::unordered_map<std::string, uint16_t> vars;
+};
+
+struct ExecutableScreen : public Screen {
+    std::vector<Instruction> instructions;
+    ProcessMemory memory;
+    int instructionPointer = 0;
+    std::vector<std::pair<int, int>> forStack; // pair<index, remaining count>
+};
+
+ExecutableScreen createScreen(std::string name)
 {
-    Screen newScreen;
+    ExecutableScreen newScreen;
     newScreen.cpuId = 0;
     newScreen.currentLine = 0;
     newScreen.totalLines = 100;
@@ -146,7 +122,7 @@ Screen createScreen(std::string name)
     return newScreen;
 }
 
-void printScreen(const Screen &screen)
+void printScreen(const ExecutableScreen &screen)
 {
     std::cout << "Screen Title: " << screen.name << "\n";
     std::cout << "Current Line: " << screen.currentLine << "/" << screen.totalLines << "\n";
@@ -173,81 +149,105 @@ void clearScreen()
 #endif
 }
 
-std::queue<Screen *> readyQueue;
+std::queue<ExecutableScreen *> readyQueue;
 std::mutex queueMutex;
 std::condition_variable cv;
 bool stopScheduler = false;
 
-void cpuWorker(int coreId)
-{
-
-    while (!stopScheduler)
-    {
+void cpuWorker(int coreId) {
+    while (!stopScheduler) {
+        // Wait for a process to schedule
         std::unique_lock<std::mutex> lock(queueMutex);
-        cv.wait(lock, []
-                { return !readyQueue.empty() || stopScheduler; });
-
+        cv.wait(lock, []{
+            return !readyQueue.empty() || stopScheduler;
+        });
         if (stopScheduler && readyQueue.empty())
             break;
 
-        Screen *screen = readyQueue.front();
+        // Pop the next screen and cast to ExecutableScreen
+        Screen* baseScreen = readyQueue.front();
         readyQueue.pop();
         lock.unlock();
-        // std::cout << "[Core " << coreId << "] Executing " << screen->name << "\n";
+        ExecutableScreen* execScreen = dynamic_cast<ExecutableScreen*>(baseScreen);
+        if (!execScreen)
+            continue;
 
-        bool headerPrinted = false;
+        // Initialize log file with header once
+        {
+            std::ofstream headerOut(output_dir + "/" + execScreen->name + ".txt", std::ios::app);
+            if (headerOut.is_open()) {
+                headerOut << "Process name: " << execScreen->name << "\nLogs:\n\n";
+            }
+        }
 
-        for (auto& inst : screen->instructions) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(delayPerExec));
+        // Execute instructions sequentially
+        while (execScreen->instructionPointer < execScreen->instructions.size()) {
+            Instruction& inst = execScreen->instructions[execScreen->instructionPointer];
+            std::string logEntry;
 
-            switch (inst.op) {
-                case OpCode::DECLARE: {
-                    std::string var = inst.args[0];
-                    uint16_t val = static_cast<uint16_t>(std::stoi(inst.args[1]));
-                    screen->variables[var] = val;
+            switch (inst.type) {
+                case InstructionType::DECLARE:
+                    execScreen->memory.vars[inst.var1] = inst.value;
+                    logEntry = "Declared " + inst.var1 + " = " + std::to_string(inst.value);
                     break;
-                }
-                case OpCode::ADD: {
-                    uint16_t a = screen->variables[inst.args[1]];
-                    uint16_t b = 0;
-                    try { b = static_cast<uint16_t>(std::stoi(inst.args[2])); }
-                    catch (...) { b = screen->variables[inst.args[2]]; }
-                    screen->variables[inst.args[0]] = a + b;
-                    break;
-                }
-                case OpCode::SUBTRACT: {
-                    uint16_t a = screen->variables[inst.args[1]];
-                    uint16_t b = 0;
-                    try { b = static_cast<uint16_t>(std::stoi(inst.args[2])); }
-                    catch (...) { b = screen->variables[inst.args[2]]; }
-                    screen->variables[inst.args[0]] = a - b;
-                    break;
-                }
-                case OpCode::SLEEP: {
-                    int ticks = std::stoi(inst.args[0]);
-                    std::this_thread::sleep_for(std::chrono::milliseconds(ticks * delayPerExec));
-                    break;
-                }
-                case OpCode::PRINT: {
-                    std::string filename = output_dir + "/" + screen->name + ".txt";
-                    std::ofstream outFile(filename, std::ios::app);
-                    std::string now = getCurrentDateTime();
-                    if (outFile.is_open()) {
-                        outFile << "(" << now << ") Core:" << screen->cpuId
-                                << " " << inst.args[0] << "\n";
-                        outFile.close();
+
+                case InstructionType::PRINT: {
+                    logEntry = inst.message;
+                    if (execScreen->memory.vars.count(inst.var1)) {
+                        logEntry += std::to_string(execScreen->memory.vars[inst.var1]);
+                    } else {
+                        logEntry += "undefined";
                     }
                     break;
                 }
+
+                case InstructionType::ADD: {
+                    uint16_t a = execScreen->memory.vars[inst.var2];
+                    uint16_t b = execScreen->memory.vars[inst.var3];
+                    execScreen->memory.vars[inst.var1] = a + b;
+                    logEntry = "Added: " + inst.var1 + " = " + std::to_string(execScreen->memory.vars[inst.var1]);
+                    break;
+                }
+
+                case InstructionType::SUBTRACT: {
+                    uint16_t a = execScreen->memory.vars[inst.var2];
+                    uint16_t b = execScreen->memory.vars[inst.var3];
+                    execScreen->memory.vars[inst.var1] = a - b;
+                    logEntry = "Subtracted: " + inst.var1 + " = " + std::to_string(execScreen->memory.vars[inst.var1]);
+                    break;
+                }
+
+                case InstructionType::SLEEP:
+                    std::this_thread::sleep_for(std::chrono::milliseconds(inst.sleepTicks * delayPerExec));
+                    logEntry = "Slept for " + std::to_string(inst.sleepTicks) + " ticks.";
+                    break;
+
+                default:
+                    break;
             }
-            screen->currentLine++;
+
+            // Update execution metadata
+            execScreen->currentLine++;
+            execScreen->cpuId = coreId;
+            execScreen->lastLogTime = getCurrentDateTime();
+
+            // Append log entry to file
+            std::ofstream outFile(output_dir + "/" + execScreen->name + ".txt", std::ios::app);
+            if (outFile.is_open()) {
+                outFile << "(" << execScreen->lastLogTime << ") Core:" << coreId << " " << logEntry << "\n";
+            }
+
+            // Advance instruction pointer and simulate execution delay
+            execScreen->instructionPointer++;
+            std::this_thread::sleep_for(std::chrono::milliseconds(delayPerExec));
         }
 
-        screen->finishedTime = getCurrentDateTime();
+        // Mark process as finished
+        execScreen->finishedTime = getCurrentDateTime();
     }
 }
 
-void schedulerThreadFunc(std::vector<Screen> &screens)
+void schedulerThreadFunc(std::vector<ExecutableScreen> &screens)
 {
     for (auto &screen : screens)
     {
@@ -259,7 +259,7 @@ void schedulerThreadFunc(std::vector<Screen> &screens)
     }
 }
 
-void startPrintJob(std::vector<Screen> &screens)
+void startPrintJob(std::vector<ExecutableScreen> &screens)
 {
     isPrinting = true;
     std::thread scheduler(schedulerThreadFunc, std::ref(screens));
@@ -338,6 +338,55 @@ void readConfigFile(const std::string& filename) {
     }
 }
 
+std::vector<Instruction> generateRandomInstructions(int count) {
+    std::vector<Instruction> instructions;
+    std::vector<std::string> vars = {"x", "y", "z"};
+
+    for (int i = 0; i < count; ++i) {
+        int type = getRand(0, 4);
+        switch (type) {
+        case 0: { // DECLARE
+            Instruction inst{InstructionType::DECLARE};
+            inst.var1 = vars[getRand(0, 2)];
+            inst.value = getRand(1, 100);
+            instructions.push_back(inst);
+            break;
+        }
+        case 1: { // PRINT
+            Instruction inst{InstructionType::PRINT};
+            inst.var1 = vars[getRand(0, 2)];
+            inst.message = "Value from: ";
+            instructions.push_back(inst);
+            break;
+        }
+        case 2: { // ADD
+            Instruction inst{InstructionType::ADD};
+            inst.var1 = vars[getRand(0, 2)];
+            inst.var2 = vars[getRand(0, 2)];
+            inst.var3 = vars[getRand(0, 2)];
+            instructions.push_back(inst);
+            break;
+        }
+        case 3: { // SUBTRACT
+            Instruction inst{InstructionType::SUBTRACT};
+            inst.var1 = vars[getRand(0, 2)];
+            inst.var2 = vars[getRand(0, 2)];
+            inst.var3 = vars[getRand(0, 2)];
+            instructions.push_back(inst);
+            break;
+        }
+        case 4: { // SLEEP
+            Instruction inst{InstructionType::SLEEP};
+            inst.sleepTicks = getRand(1, 3);
+            instructions.push_back(inst);
+            break;
+        }
+        }
+    }
+
+    return instructions;
+}
+
 
 int main()
 {
@@ -346,9 +395,9 @@ int main()
     // Said parameters are crucial and relevant to scheduling. 
     printHeader();
     std::string cmd;
-    std::vector<Screen> screens;
-    Screen currentScreen;
-    Screen mainMenu;
+    std::vector<ExecutableScreen> screens;
+    ExecutableScreen currentScreen;
+    ExecutableScreen mainMenu;
     mainMenu.name = "Main Menu";
     currentScreen = mainMenu;
     std::string report_file_name = "csopesy-log.txt";
@@ -369,15 +418,17 @@ int main()
             command.push_back(token);
         }
 
-        if (!isInitialized && !(command[0] == "initialize") && command[0] != "exit") {
+        if (!isInitialized && !(command[0] == "initialize")) {
             std::cout << "Please run the 'initialize' command first.\n";
             continue;
         }
         // Command processing
+        // TODO: "scheduler-start" and "scheduler-stop"
         if (command.empty())
         {
             continue;
         }
+        // TODO: improve ux
         else if (command[0] == "scheduler-start" && currentScreen.name == "Main Menu")
         {
             if (!schedulerRunning)
@@ -386,32 +437,21 @@ int main()
 
                 schedulerGeneratorThread = std::thread([&screens]() {
                     int nextPid = 1;
-                    while (schedulerRunning)
-                    {
-                        std::string procName = "process" + std::to_string(nextPid++);
-                        Screen newProc = createScreen(procName);
-
-                        int insCount = getRand(minInstructions, maxInstructions);
-                        for (int i = 0; i < insCount; ++i) {
-                            newProc.instructions.push_back(genRandomInstruction(procName));
-                        }
-
+                    while (schedulerRunning) {
+                        std::string procName = "p" + std::to_string(nextPid++);
+                        auto exec = ExecutableScreen{};
+                        exec.name = procName;
+                        exec.instructions = generateRandomInstructions(getRand(minInstructions, maxInstructions));
+                        exec.createdDate = getCurrentDateTime();
                         {
-                            std::lock_guard<std::mutex> lock(screensMutex);
-                            screens.push_back(std::move(newProc));
+                            std::lock_guard<std::mutex> lg(screensMutex);
+                            screens.push_back(std::move(exec));
                         }
-
-                        {
-                            std::lock_guard<std::mutex> lock(queueMutex);
-                            readyQueue.push(&screens.back());  // pointer to the just-added screen
-                        }
-
-                        cv.notify_one();
                         std::this_thread::sleep_for(std::chrono::milliseconds(batchFreq * delayPerExec));
                     }
                 });
-                std::cout << "Scheduler started.\n";
 
+                std::cout << "Scheduler started.\n";
             }
             else
             {
@@ -456,7 +496,7 @@ int main()
         {
             if (command[1] == "-s") // TODO: Screen specific commands: "exit" and "process-smi"
             {
-                Screen newScreen = createScreen(command[2]);
+                ExecutableScreen newScreen = createScreen(command[2]);
                 screens.push_back(newScreen);
                 currentScreen = newScreen;
                 clearScreen();
@@ -537,33 +577,22 @@ int main()
                 report_stream.clear();
             }
         }
-        else if (command[0] == "generate") 
+        else if (command[0] == "generate") // TODO: implement this in scheduler-start
         {
-            if (command.size() < 2) {
-                std::cout << "Specify number of processes to generate\n\n";
-            } else {
+            if (command[1] == "")
+            {
+                std::cout << "Specify number of process to generate\n\n";
+            }
+            else
+            {
                 for (int i = 0; i < std::stoi(command[1]); ++i)
                 {
                     std::string pname = "process" + std::to_string(i);
-                    Screen newProc = createScreen(pname);
-
-                    int insCount = getRand(minInstructions, maxInstructions);
-                    for (int j = 0; j < insCount; ++j) {
-                        newProc.instructions.push_back(genRandomInstruction(pname));
-                    }
-
-                    {
-                        std::lock_guard<std::mutex> lock(queueMutex);
-                        readyQueue.push(&newProc);
-                    }
-
-                    cv.notify_one();
-                    screens.push_back(std::move(newProc));
+                    screens.push_back(createScreen(pname));
                 }
                 std::cout << "Generated " << command[1] << " processes!\n";
             }
         }
-
         else if (command[0] == "report-util") 
         {
             namespace fs = std::filesystem;
@@ -577,14 +606,14 @@ int main()
         {
             if (isPrinting)
             {
-                std::cout << "Print job already running.\n";
+                // std::cout << "Print job already running.\n";
             }
             else
             {
                 stopScheduler = false; // reset in case of re-run
                 printThread = std::thread(startPrintJob, std::ref(screens));
                 printThread.detach(); // run in background
-                std::cout << "⏳ Print job started in background.\n";
+                // std::cout << "⏳ Print job started in background.\n";
             }
         }
         else if ((command[0] == "initialize"))
