@@ -389,16 +389,29 @@ int main()
                     while (schedulerRunning)
                     {
                         std::string procName = "process" + std::to_string(nextPid++);
-                        Screen newProc     = createScreen(procName);
+                        Screen newProc = createScreen(procName);
+
                         int insCount = getRand(minInstructions, maxInstructions);
                         for (int i = 0; i < insCount; ++i) {
                             newProc.instructions.push_back(genRandomInstruction(procName));
                         }
-                        std::this_thread::sleep_for(
-                            std::chrono::milliseconds(batchFreq * delayPerExec));
+
+                        {
+                            std::lock_guard<std::mutex> lock(screensMutex);
+                            screens.push_back(std::move(newProc));
+                        }
+
+                        {
+                            std::lock_guard<std::mutex> lock(queueMutex);
+                            readyQueue.push(&screens.back());  // pointer to the just-added screen
+                        }
+
+                        cv.notify_one();
+                        std::this_thread::sleep_for(std::chrono::milliseconds(batchFreq * delayPerExec));
                     }
                 });
                 std::cout << "Scheduler started.\n";
+
             }
             else
             {
@@ -526,20 +539,31 @@ int main()
         }
         else if (command[0] == "generate") 
         {
-            if (command[1] == "")
-            {
-                std::cout << "Specify number of process to generate\n\n";
-            }
-            else
-            {
+            if (command.size() < 2) {
+                std::cout << "Specify number of processes to generate\n\n";
+            } else {
                 for (int i = 0; i < std::stoi(command[1]); ++i)
                 {
                     std::string pname = "process" + std::to_string(i);
-                    screens.push_back(createScreen(pname));
+                    Screen newProc = createScreen(pname);
+
+                    int insCount = getRand(minInstructions, maxInstructions);
+                    for (int j = 0; j < insCount; ++j) {
+                        newProc.instructions.push_back(genRandomInstruction(pname));
+                    }
+
+                    {
+                        std::lock_guard<std::mutex> lock(queueMutex);
+                        readyQueue.push(&newProc);
+                    }
+
+                    cv.notify_one();
+                    screens.push_back(std::move(newProc));
                 }
                 std::cout << "Generated " << command[1] << " processes!\n";
             }
         }
+
         else if (command[0] == "report-util") 
         {
             namespace fs = std::filesystem;
