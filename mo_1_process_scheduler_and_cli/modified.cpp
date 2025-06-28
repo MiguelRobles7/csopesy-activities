@@ -131,6 +131,9 @@ void printScreen(const ExecutableScreen &screen)
     std::cout << "Screen Title: " << screen.name << "\n";
     std::cout << "Current Line: " << screen.currentLine << "/" << screen.totalLines << "\n";
     std::cout << "Created Date: " << screen.createdDate << "\n";
+    for (const auto &kv : screen.memory.vars) {
+        std::cout << "  " << kv.first << " = " << kv.second << "\n";
+    }
 }
 
 void printHeader()
@@ -599,27 +602,43 @@ int main()
         {
             if (command[1] == "-s") 
             {
-                ExecutableScreen proc = createScreen(command[2]);
-
-                proc.instructions = generateRandomInstructions(
-                                    getRand(minInstructions, maxInstructions));
-
-                proc.totalLines = static_cast<int>(proc.instructions.size());
+                if (!schedulerRunning)
                 {
-                    std::lock_guard<std::mutex> lg(screensMutex);
-                    screens.push_back(std::move(proc));
-                    // **Immediately** enqueue the new process:
-                    ExecutableScreen* p = &screens.back();
-                    {
-                        std::lock_guard<std::mutex> ql(queueMutex);
-                        readyQueue.push(p);
-                    }
-                    cv.notify_one();
-                }
+                    schedulerRunning = true;
 
-                currentScreen = proc;
-                clearScreen();
-                printScreen(proc);
+                    schedulerGeneratorThread = std::thread([&screens]() {
+                        ExecutableScreen exec{};
+                        exec.name = "proc-01";
+                        exec.instructions = generateRandomInstructions(
+                                            getRand(minInstructions, maxInstructions));
+                        exec.totalLines    = exec.instructions.size();
+                        exec.createdDate   = getCurrentDateTime();
+
+                        {
+                            std::lock_guard<std::mutex> lg(screensMutex);
+                            screens.push_back(std::move(exec));
+                            // **Immediately** enqueue the new process:
+                            ExecutableScreen* p = &screens.back();
+                            {
+                                std::lock_guard<std::mutex> ql(queueMutex);
+                                readyQueue.push(p);
+                            }
+                            cv.notify_one();
+                        }
+
+                        std::this_thread::sleep_for(
+                            std::chrono::milliseconds(batchFreq * delayPerExec));
+                    });
+
+                    if (!isPrinting) {
+                        isPrinting = true;
+                        stopScheduler = false;
+                        // Spawn CPU workers once
+                        for (int i = 0; i < CPU_CORES; ++i) {
+                            cpuThreads.emplace_back(cpuWorker, i);
+                        }
+                    }
+                }
             }
             else if (command[1] == "-r")
             {

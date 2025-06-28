@@ -129,6 +129,10 @@ void printScreen(const ExecutableScreen &screen)
     std::cout << "Screen Title: " << screen.name << "\n";
     std::cout << "Current Line: " << screen.currentLine << "/" << screen.totalLines << "\n";
     std::cout << "Created Date: " << screen.createdDate << "\n";
+    std::cout << "Variables:\n";
+    for (const auto &kv : screen.memory.vars) {
+        std::cout << "  " << kv.first << " = " << kv.second << "\n";
+    }
 }
 
 void printHeader()
