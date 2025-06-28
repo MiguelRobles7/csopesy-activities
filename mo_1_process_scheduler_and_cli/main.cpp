@@ -487,6 +487,36 @@ int main()
                 break;
             }
         }
+        else if (command[0] == "process-smi") {
+            if (currentScreen.name == "Main Menu") {
+                std::cout << "Cannot do this in the main menu";
+            }
+            else {
+                // Find the live process in your master list
+                auto it = std::find_if(
+                    screens.begin(), screens.end(),
+                    [&](const ExecutableScreen &s) { return s.name == currentScreen.name; }
+                );
+                if (it != screens.end()) {
+                    auto &proc = *it;
+                    std::cout << "Process: " << proc.name;
+                    if (proc.currentLine < proc.totalLines) {
+                        std::cout << " (Running)\n";
+                        std::cout << "  Executed " << proc.currentLine << " / " << proc.totalLines << " instructions\n";
+                    } else {
+                        std::cout << " (Finished)\n";
+                    }
+                    std::cout << "  Last Log Time: " << proc.lastLogTime << "\n";
+                    std::cout << "  CPU Core: " << proc.cpuId << "\n";
+                    std::cout << "  Variables:\n";
+                    for (auto &kv : proc.memory.vars) {
+                        std::cout << "    " << kv.first << " = " << kv.second << "\n";
+                    }
+                } else {
+                    std::cout << "Process " << currentScreen.name << " not found.\n";
+                }
+            }
+        }
         else if (command[0] == "clear" && currentScreen.name == "Main Menu")
         {
             clearScreen();
