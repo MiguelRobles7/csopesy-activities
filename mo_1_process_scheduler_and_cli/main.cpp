@@ -577,21 +577,22 @@ int main()
                 report_stream.clear();
             }
         }
-        else if (command[0] == "generate") // TODO: implement this in scheduler-start
-        {
-            if (command[1] == "")
-            {
-                std::cout << "Specify number of process to generate\n\n";
-            }
-            else
-            {
-                for (int i = 0; i < std::stoi(command[1]); ++i)
+        else if (command[0] == "generate" && command.size() == 2) {
+            int n = std::stoi(command[1]);
+            for (int i = 0; i < n; ++i) {
+                std::string pname = "p" + std::to_string(i+1);  
+                ExecutableScreen proc = createScreen(pname);
+                // ← assign real instructions here:
+                proc.instructions = generateRandomInstructions(
+                                    getRand(minInstructions, maxInstructions));
+                // optional: make totalLines match actual instruction count
+                proc.totalLines = static_cast<int>(proc.instructions.size());
                 {
-                    std::string pname = "process" + std::to_string(i);
-                    screens.push_back(createScreen(pname));
+                    std::lock_guard<std::mutex> lg(screensMutex);
+                    screens.push_back(std::move(proc));
                 }
-                std::cout << "Generated " << command[1] << " processes!\n";
             }
+            std::cout << "Generated " << n << " processes!\n";
         }
         else if (command[0] == "report-util") 
         {
