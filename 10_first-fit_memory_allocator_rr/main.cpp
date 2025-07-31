@@ -41,7 +41,7 @@ int batchFreq = 1;
 int minInstructions = 5;
 int maxInstructions = 10;
 int delayPerExec = 100;
-std::string schedulerAlgo = "fcfs";
+std::string schedulerAlgo = "rr";
 std::string output_dir = "./";
 
 std::deque<std::thread> cpuThreads;
