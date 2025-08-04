@@ -163,7 +163,6 @@ int allocateMemory(const std::string &procName, int memSize)
 void freeMemory(const std::string &procName)
 {
     std::lock_guard<std::mutex> lock(memMutex);
-    std::cout << "[INFO] Freeing memory for process: " << procName << "\n";
     for (auto &block : memoryBlocks)
     {
         if (block.owner == procName)
@@ -184,20 +183,10 @@ void freeMemory(const std::string &procName)
             ++i;
         }
     }
-    std::cout << "[DEBUG] Memory Blocks After Freeing:\n";
-    for (const auto &block : memoryBlocks)
-    {
-        std::cout << "  [" << block.start << " - " << (block.start + block.size - 1)
-                  << "] " << (block.owner.empty() ? "FREE" : block.owner)
-                  << " (" << block.size << " bytes)\n";
-    }
 
     int totalMem = 0;
     for (const auto &b : memoryBlocks)
         totalMem += b.size;
-    if (totalMem != MEM_TOTAL)
-        std::cout << "[WARNING] Memory block total is " << totalMem << " != MEM_TOTAL (" << MEM_TOTAL << ")\n";
-
 }
 
 struct Screen
@@ -1280,14 +1269,6 @@ int main()
                 else
                     usedMem += block.size;
             }
-
-            std::cout << "\nMemory Block States:\n";
-            for (const auto &block : memoryBlocks) {
-                std::cout << "[" << block.start << " - " << (block.start + block.size - 1)
-                        << "] " << (block.owner.empty() ? "FREE" : block.owner)
-                        << " (" << block.size << " bytes)\n";
-            }
-
 
             std::cout << "\n------ VMSTAT REPORT ------\n";
             std::cout << "Total memory       : " << MEM_TOTAL << " bytes\n";
