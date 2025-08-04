@@ -44,6 +44,12 @@ int maxInstructions = 10;
 int delayPerExec = 100;
 std::string schedulerAlgo = "rr";
 std::string output_dir = "./";
+std::atomic<int> totalTicks{0};
+std::atomic<int> activeTicks{0};
+std::atomic<int> idleTicks{0};
+std::atomic<int> pagesPagedIn{0};
+std::atomic<int> pagesPagedOut{0};
+
 
 std::deque<std::thread> cpuThreads;
 int MEM_TOTAL = 16384;
@@ -201,7 +207,6 @@ ExecutableScreen createScreen(std::string name)
     return newScreen;
 }
 
-
 void shutdownProcess(ExecutableScreen& proc, const std::string& offendingAddr) {
     proc.isShutdown = true;
     proc.finishedTime = getCurrentDateTime();
@@ -253,8 +258,12 @@ void cpuWorker(int coreId) {
         cv.wait(lock, []{
             return !readyQueue.empty() || stopScheduler;
         });
-        if (stopScheduler && readyQueue.empty())
-            break;
+        if (readyQueue.empty()) {
+            idleTicks++;
+            totalTicks++;
+            continue;
+        }
+            
 
         // Pop the next process
         ExecutableScreen* execScreen = readyQueue.front();
@@ -385,33 +394,35 @@ void cpuWorker(int coreId) {
                     outFile << "(" << execScreen->lastLogTime << ") Core:" << coreId << " " << logEntry << "\n";
                 }
                 std::this_thread::sleep_for(std::chrono::milliseconds(delayPerExec));
+                totalTicks++;
+                activeTicks++;
                 slice--;
-        static int snapshotCounter = 0;
-        snapshotCounter++;
-        if (snapshotCounter % quantum == 0) {
-            std::ofstream snap("memory_stamp_" + std::to_string(snapshotCounter) + ".txt");
-            snap << "Timestamp: (" << getCurrentDateTime() << ")\n";
+                static int snapshotCounter = 0;
+                snapshotCounter++;
+                if (snapshotCounter % quantum == 0) {
+                    std::ofstream snap("memory_stamp_" + std::to_string(snapshotCounter) + ".txt");
+                    snap << "Timestamp: (" << getCurrentDateTime() << ")\n";
 
-            int inMemCount = 0;
-            for (const auto& b : memoryBlocks)
-                if (!b.owner.empty()) inMemCount++;
-            snap << "Number of processes in memory: " << inMemCount << "\n";
+                    int inMemCount = 0;
+                    for (const auto& b : memoryBlocks)
+                        if (!b.owner.empty()) inMemCount++;
+                    snap << "Number of processes in memory: " << inMemCount << "\n";
 
-            int externalFrag = 0;
-            for (const auto& b : memoryBlocks)
-                if (b.owner.empty()) externalFrag += b.size;
-            snap << "Total external fragmentation in KB: " << externalFrag / 1024 << "\n\n";
+                    int externalFrag = 0;
+                    for (const auto& b : memoryBlocks)
+                        if (b.owner.empty()) externalFrag += b.size;
+                    snap << "Total external fragmentation in KB: " << externalFrag / 1024 << "\n\n";
 
-            snap << "----end---- = " << MEM_TOTAL << "\n";
-            int cur = MEM_TOTAL;
-            for (auto it = memoryBlocks.rbegin(); it != memoryBlocks.rend(); ++it) {
-                if (!it->owner.empty()) {
-                    snap << cur << "\n" << it->owner << "\n" << (cur - it->size) << "\n";
+                    snap << "----end---- = " << MEM_TOTAL << "\n";
+                    int cur = MEM_TOTAL;
+                    for (auto it = memoryBlocks.rbegin(); it != memoryBlocks.rend(); ++it) {
+                        if (!it->owner.empty()) {
+                            snap << cur << "\n" << it->owner << "\n" << (cur - it->size) << "\n";
+                        }
+                        cur -= it->size;
+                    }
+                    snap << "----start---- = 0\n";
                 }
-                cur -= it->size;
-            }
-            snap << "----start---- = 0\n";
-        }
 
             }
             if (execScreen->instructionPointer < (int)execScreen->instructions.size()) {
@@ -722,7 +733,6 @@ std::vector<Instruction> generateRandomInstructions(int count, const std::string
     return instructions;
 }
 
-
 int main()
 {
     bool isInitialized = false; 
@@ -891,6 +901,25 @@ int main()
                     std::cout << "Process " << currentScreen.name << " not found.\n";
                 }
             }
+        }
+        else if (command[0] == "vmstat") {
+            std::lock_guard<std::mutex> lock(memMutex);
+            int usedMem = 0;
+            for (const auto& block : memoryBlocks)
+                if (!block.owner.empty()) usedMem += block.size;
+
+            int freeMem = MEM_TOTAL - usedMem;
+
+            std::cout << "\n------ VMSTAT REPORT ------\n";
+            std::cout << "Total memory       : " << MEM_TOTAL << " bytes\n";
+            std::cout << "Used memory        : " << usedMem << " bytes\n";
+            std::cout << "Free memory        : " << freeMem << " bytes\n";
+            std::cout << "Active CPU ticks   : " << activeTicks.load() << "\n";
+            std::cout << "Idle CPU ticks     : " << idleTicks.load() << "\n";
+            std::cout << "Total CPU ticks    : " << totalTicks.load() << "\n";
+            std::cout << "Pages Paged In     : " << pagesPagedIn.load() << "\n";
+            std::cout << "Pages Paged Out    : " << pagesPagedOut.load() << "\n";
+            std::cout << "----------------------------\n\n";
         }
         else if (command[0] == "clear" && currentScreen.name == "Main Menu")
         {
