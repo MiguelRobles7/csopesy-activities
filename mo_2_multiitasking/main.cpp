@@ -131,21 +131,27 @@ std::string getCurrentDateTime()
 int allocateMemory(const std::string &procName, int memSize)
 {
     std::lock_guard<std::mutex> lock(memMutex);
-    for (auto &block : memoryBlocks)
+    for (size_t i = 0; i < memoryBlocks.size(); ++i)
     {
+        auto &block = memoryBlocks[i];
         if (block.owner.empty() && block.size >= memSize)
         {
             int allocStart = block.start;
-            block.owner = procName;
 
-            if (block.size > memSize)
+            // Case 1: Exact fit
+            if (block.size == memSize)
             {
-                auto it = std::find_if(memoryBlocks.begin(), memoryBlocks.end(), [&](const MemoryBlock &b)
-                                       { return b.start == block.start && b.size == block.size && b.owner == block.owner; });
-                memoryBlocks.insert(it + 1, MemoryBlock{block.start + memSize, block.size - memSize, ""});
-
-                block.size = memSize;
+                block.owner = procName;
+                return allocStart;
             }
+
+            // Case 2: Need to split
+            MemoryBlock allocated{block.start, memSize, procName};
+            MemoryBlock leftover{block.start + memSize, block.size - memSize, ""};
+
+            // Replace the original free block with two new blocks
+            memoryBlocks[i] = allocated;
+            memoryBlocks.insert(memoryBlocks.begin() + i + 1, leftover);
 
             return allocStart;
         }
@@ -153,9 +159,11 @@ int allocateMemory(const std::string &procName, int memSize)
     return -1; // no fit found
 }
 
+
 void freeMemory(const std::string &procName)
 {
     std::lock_guard<std::mutex> lock(memMutex);
+    std::cout << "[INFO] Freeing memory for process: " << procName << "\n";
     for (auto &block : memoryBlocks)
     {
         if (block.owner == procName)
@@ -176,6 +184,20 @@ void freeMemory(const std::string &procName)
             ++i;
         }
     }
+    std::cout << "[DEBUG] Memory Blocks After Freeing:\n";
+    for (const auto &block : memoryBlocks)
+    {
+        std::cout << "  [" << block.start << " - " << (block.start + block.size - 1)
+                  << "] " << (block.owner.empty() ? "FREE" : block.owner)
+                  << " (" << block.size << " bytes)\n";
+    }
+
+    int totalMem = 0;
+    for (const auto &b : memoryBlocks)
+        totalMem += b.size;
+    if (totalMem != MEM_TOTAL)
+        std::cout << "[WARNING] Memory block total is " << totalMem << " != MEM_TOTAL (" << MEM_TOTAL << ")\n";
+
 }
 
 struct Screen
@@ -647,6 +669,14 @@ void cpuWorker(int coreId)
                     snap << "----start---- = 0\n";
                 }
             }
+
+            if (execScreen->isShutdown)
+            {
+                freeMemory(execScreen->name);
+                execScreen->finishedTime = getCurrentDateTime();
+                continue; // Skip requeueing
+            }
+
             if (execScreen->instructionPointer < (int)execScreen->instructions.size())
             {
                 // not finished: re-enqueue for next round
@@ -1243,11 +1273,21 @@ int main()
         {
             std::lock_guard<std::mutex> lock(memMutex);
             int usedMem = 0;
-            for (const auto &block : memoryBlocks)
-                if (!block.owner.empty())
+            int freeMem = 0;
+            for (const auto &block : memoryBlocks) {
+                if (block.owner.empty())
+                    freeMem += block.size;
+                else
                     usedMem += block.size;
+            }
 
-            int freeMem = MEM_TOTAL - usedMem;
+            std::cout << "\nMemory Block States:\n";
+            for (const auto &block : memoryBlocks) {
+                std::cout << "[" << block.start << " - " << (block.start + block.size - 1)
+                        << "] " << (block.owner.empty() ? "FREE" : block.owner)
+                        << " (" << block.size << " bytes)\n";
+            }
+
 
             std::cout << "\n------ VMSTAT REPORT ------\n";
             std::cout << "Total memory       : " << MEM_TOTAL << " bytes\n";
