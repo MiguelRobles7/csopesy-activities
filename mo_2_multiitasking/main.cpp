@@ -112,23 +112,23 @@ std::string getCurrentDateTime()
     return std::string(buf);
 }
 
-int allocateMemory(const std::string &procName)
+int allocateMemory(const std::string &procName, int memSize)
 {
     std::lock_guard<std::mutex> lock(memMutex);
     for (auto &block : memoryBlocks)
     {
-        if (block.owner.empty() && block.size >= MEM_PER_PROC)
+        if (block.owner.empty() && block.size >= memSize)
         {
             int allocStart = block.start;
             block.owner = procName;
 
-            if (block.size > MEM_PER_PROC)
+            if (block.size > memSize)
             {
                 auto it = std::find_if(memoryBlocks.begin(), memoryBlocks.end(), [&](const MemoryBlock &b)
                                        { return b.start == block.start && b.size == block.size && b.owner == block.owner; });
-                memoryBlocks.insert(it + 1, MemoryBlock{block.start + MEM_PER_PROC, block.size - MEM_PER_PROC, ""});
+                memoryBlocks.insert(it + 1, MemoryBlock{block.start + memSize, block.size - memSize, ""});
 
-                block.size = MEM_PER_PROC;
+                block.size = memSize;
             }
 
             return allocStart;
@@ -211,6 +211,7 @@ struct ExecutableScreen : public Screen
     std::vector<std::pair<int, int>> forStack; // pair<index, remaining count>
     bool isShutdown = false;
     std::string shutdownMessage;
+    int memorySize = 0;
 };
 
 ExecutableScreen createScreen(std::string name)
@@ -902,7 +903,7 @@ int main()
                                             getRand(minInstructions, maxInstructions), exec.name);
                         exec.totalLines    = exec.instructions.size();
                         exec.createdDate   = getCurrentDateTime();
-                        int allocStart = allocateMemory(exec.name);
+                        int allocStart = allocateMemory(exec.name, MEM_PER_PROC);
                         if (allocStart == -1) {
                             // std::cout << "No memory for " << exec.name << ", requeueing.\n";
                             std::this_thread::sleep_for(std::chrono::milliseconds(batchFreq * delayPerExec));
@@ -1056,6 +1057,45 @@ int main()
                 clearScreen();
                 printScreen(proc);
             }
+            else if (command[1] == "-s" && command.size() == 4)
+            {
+                std::string procName = command[2];
+                int memSize = std::stoi(command[3]);
+
+                if (memSize < 64 || memSize > 8192 || (memSize & (memSize - 1)) != 0)
+                {
+                    std::cout << "Invalid memory allocation.\n";
+                    continue;
+                }
+
+                ExecutableScreen proc = createScreen(procName);
+                proc.memorySize = memSize;
+                proc.instructions = generateRandomInstructions(
+                    getRand(minInstructions, maxInstructions), procName);
+                proc.totalLines = static_cast<int>(proc.instructions.size());
+
+                int allocStart = allocateMemory(procName, memSize);
+                if (allocStart == -1)
+                {
+                    std::cout << "Memory allocation failed.\n";
+                    continue;
+                }
+
+                {
+                    std::lock_guard<std::mutex> lg(screensMutex);
+                    screens.push_back(std::move(proc));
+                    ExecutableScreen *p = &screens.back();
+                    {
+                        std::lock_guard<std::mutex> ql(queueMutex);
+                        readyQueue.push(p);
+                    }
+                    cv.notify_one();
+                }
+
+                currentScreen = screens.back();
+                clearScreen();
+                printScreen(currentScreen);
+            }
             else if (command[1] == "-r" && command.size() == 3)
             {
                 bool found = false;
@@ -1171,7 +1211,8 @@ int main()
 
                 proc.totalLines = static_cast<int>(proc.instructions.size());
 
-                int allocStart = allocateMemory(procName);
+                proc.memorySize = memSize;
+                int allocStart = allocateMemory(procName, memSize);
                 if (allocStart == -1)
                 {
                     std::cout << "Memory allocation failed.\n";
