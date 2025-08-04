@@ -971,27 +971,27 @@ std::vector<Instruction> generateRandomInstructions(int count, const std::string
 
     for (int i = 0; i < count; ++i)
     {
-        int type = getRand(0, 4);
+        int type = getRand(0, 6);
         switch (type)
         {
-        case 0:
-        { // DECLARE
+        case 0: // DECLARE
+        {
             Instruction inst{InstructionType::DECLARE};
             inst.var1 = vars[getRand(0, 2)];
             inst.value = getRand(1, 100);
             instructions.push_back(inst);
             break;
         }
-        case 1:
-        { // PRINT
+        case 1: // PRINT
+        {
             Instruction inst{InstructionType::PRINT};
             inst.var1 = vars[getRand(0, 2)];
             inst.message = "Hello world from " + processName + "!";
             instructions.push_back(inst);
             break;
         }
-        case 2:
-        { // ADD
+        case 2: // ADD
+        {
             Instruction inst{InstructionType::ADD};
             inst.var1 = vars[getRand(0, 2)];
             inst.var2 = vars[getRand(0, 2)];
@@ -999,8 +999,8 @@ std::vector<Instruction> generateRandomInstructions(int count, const std::string
             instructions.push_back(inst);
             break;
         }
-        case 3:
-        { // SUBTRACT
+        case 3: // SUBTRACT
+        {
             Instruction inst{InstructionType::SUBTRACT};
             inst.var1 = vars[getRand(0, 2)];
             inst.var2 = vars[getRand(0, 2)];
@@ -1008,10 +1008,27 @@ std::vector<Instruction> generateRandomInstructions(int count, const std::string
             instructions.push_back(inst);
             break;
         }
-        case 4:
-        { // SLEEP
+        case 4: // SLEEP
+        {
             Instruction inst{InstructionType::SLEEP};
             inst.sleepTicks = getRand(1, 3);
+            instructions.push_back(inst);
+            break;
+        }
+        case 5: // WRITE
+        {
+
+            Instruction inst{InstructionType::WRITE};
+            inst.var1 = "0x" + std::to_string(0x1000 + getRand(0, 1024)); // random hex address
+            inst.var2 = vars[getRand(0, 2)];
+            instructions.push_back(inst);
+            break;
+        }
+        case 6: // READ
+        {
+            Instruction inst{InstructionType::READ};
+            inst.var1 = vars[getRand(0, 2)];
+            inst.var2 = "0x" + std::to_string(0x1000 + getRand(0, 1024)); // random hex address
             instructions.push_back(inst);
             break;
         }
