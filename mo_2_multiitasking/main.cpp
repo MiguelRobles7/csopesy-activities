@@ -17,14 +17,16 @@
 #include <atomic>
 #include <mutex>
 #include <deque>
+#include <unordered_map>
 
 std::atomic<bool> schedulerRunning(false);
-std::thread       schedulerGeneratorThread;
-std::mutex        screensMutex;  // guards the `screens` vector during pushes
+std::thread schedulerGeneratorThread;
+std::mutex screensMutex;                                  // guards the `screens` vector during pushes
 std::unordered_map<std::string, uint16_t> physicalMemory; // key = "0x500"
 std::mutex physicalMemoryMutex;
 
-struct Config {
+struct Config
+{
     int minIns;
     int maxIns;
     int schedulerAlgo;
@@ -56,28 +58,36 @@ int MEM_TOTAL = 16384;
 int MEM_FRAME_SIZE = 16;
 int MEM_PER_PROC = 4096;
 
-struct MemoryBlock {
+struct MemoryBlock
+{
     int start;
     int size;
-    std::string owner; 
+    std::string owner;
 };
 
 std::vector<MemoryBlock> memoryBlocks = {{0, MEM_TOTAL, ""}}; // initially all free
 std::mutex memMutex;
 
-bool isValidMemoryAccess(const std::string& procName, const std::string& hexAddress) {
+bool isValidMemoryAccess(const std::string &procName, const std::string &hexAddress)
+{
     // Convert hex string to int
     int addr = 0;
-    try {
+    try
+    {
         addr = std::stoi(hexAddress, nullptr, 16);
-    } catch (...) {
+    }
+    catch (...)
+    {
         return false; // Invalid hex format
     }
 
     std::lock_guard<std::mutex> lock(memMutex);
-    for (const auto& block : memoryBlocks) {
-        if (block.owner == procName) {
-            if (addr >= block.start && addr < block.start + block.size) {
+    for (const auto &block : memoryBlocks)
+    {
+        if (block.owner == procName)
+        {
+            if (addr >= block.start && addr < block.start + block.size)
+            {
                 return true;
             }
         }
@@ -108,20 +118,23 @@ std::string getCurrentDateTime()
     return std::string(buf);
 }
 
-int allocateMemory(const std::string& procName) {
+int allocateMemory(const std::string &procName, int memSize)
+{
     std::lock_guard<std::mutex> lock(memMutex);
-    for (auto& block : memoryBlocks) {
-        if (block.owner.empty() && block.size >= MEM_PER_PROC) {
+    for (auto &block : memoryBlocks)
+    {
+        if (block.owner.empty() && block.size >= memSize)
+        {
             int allocStart = block.start;
             block.owner = procName;
 
-            if (block.size > MEM_PER_PROC) {
-               auto it = std::find_if(memoryBlocks.begin(), memoryBlocks.end(), [&](const MemoryBlock& b) {
-                    return b.start == block.start && b.size == block.size && b.owner == block.owner;
-                });
-                memoryBlocks.insert(it + 1, MemoryBlock{block.start + MEM_PER_PROC, block.size - MEM_PER_PROC, ""});
+            if (block.size > memSize)
+            {
+                auto it = std::find_if(memoryBlocks.begin(), memoryBlocks.end(), [&](const MemoryBlock &b)
+                                       { return b.start == block.start && b.size == block.size && b.owner == block.owner; });
+                memoryBlocks.insert(it + 1, MemoryBlock{block.start + memSize, block.size - memSize, ""});
 
-                block.size = MEM_PER_PROC;
+                block.size = memSize;
             }
 
             return allocStart;
@@ -130,19 +143,26 @@ int allocateMemory(const std::string& procName) {
     return -1; // no fit found
 }
 
-void freeMemory(const std::string& procName) {
+void freeMemory(const std::string &procName)
+{
     std::lock_guard<std::mutex> lock(memMutex);
-    for (auto& block : memoryBlocks) {
-        if (block.owner == procName) {
+    for (auto &block : memoryBlocks)
+    {
+        if (block.owner == procName)
+        {
             block.owner = "";
         }
     }
 
-    for (size_t i = 0; i + 1 < memoryBlocks.size();) {
-        if (memoryBlocks[i].owner.empty() && memoryBlocks[i + 1].owner.empty()) {
+    for (size_t i = 0; i + 1 < memoryBlocks.size();)
+    {
+        if (memoryBlocks[i].owner.empty() && memoryBlocks[i + 1].owner.empty())
+        {
             memoryBlocks[i].size += memoryBlocks[i + 1].size;
             memoryBlocks.erase(memoryBlocks.begin() + i + 1);
-        } else {
+        }
+        else
+        {
             ++i;
         }
     }
@@ -159,11 +179,11 @@ struct Screen
     std::string lastLogTime;
     std::string finishedTime;
 
-    virtual ~Screen() = default;      // <— make it polymorphic
-
+    virtual ~Screen() = default; // <— make it polymorphic
 };
 
-enum class InstructionType {
+enum class InstructionType
+{
     DECLARE,
     PRINT,
     ADD,
@@ -173,7 +193,8 @@ enum class InstructionType {
     WRITE
 };
 
-struct Instruction {
+struct Instruction
+{
     InstructionType type;
     std::string var1, var2, var3;
     std::string message;
@@ -183,17 +204,20 @@ struct Instruction {
     int repeatCount = 1;
 };
 
-struct ProcessMemory {
+struct ProcessMemory
+{
     std::unordered_map<std::string, uint16_t> vars;
 };
 
-struct ExecutableScreen : public Screen {
+struct ExecutableScreen : public Screen
+{
     std::vector<Instruction> instructions;
     ProcessMemory memory;
     int instructionPointer = 0;
     std::vector<std::pair<int, int>> forStack; // pair<index, remaining count>
     bool isShutdown = false;
     std::string shutdownMessage;
+    int memorySize = 0;
 };
 
 ExecutableScreen createScreen(std::string name)
@@ -207,7 +231,12 @@ ExecutableScreen createScreen(std::string name)
     return newScreen;
 }
 
+<<<<<<< HEAD
 void shutdownProcess(ExecutableScreen& proc, const std::string& offendingAddr) {
+=======
+void shutdownProcess(ExecutableScreen &proc, const std::string &offendingAddr)
+{
+>>>>>>> 52e13169d9d579291272ff665f8b67d9218adfe8
     proc.isShutdown = true;
     proc.finishedTime = getCurrentDateTime();
     proc.shutdownMessage = "Process " + proc.name + " shut down due to memory access violation error that occurred at " +
@@ -221,7 +250,8 @@ void printScreen(const ExecutableScreen &screen)
     std::cout << "Current Line: " << screen.currentLine << "/" << screen.totalLines << "\n";
     std::cout << "Created Date: " << screen.createdDate << "\n";
     std::cout << "Variables:\n";
-    for (const auto &kv : screen.memory.vars) {
+    for (const auto &kv : screen.memory.vars)
+    {
         std::cout << "  " << kv.first << " = " << kv.second << "\n";
     }
 }
@@ -251,10 +281,13 @@ std::mutex queueMutex;
 std::condition_variable cv;
 bool stopScheduler = false;
 
-void cpuWorker(int coreId) {
-    while (!stopScheduler) {
+void cpuWorker(int coreId)
+{
+    while (!stopScheduler)
+    {
         // Wait for a process to schedule
         std::unique_lock<std::mutex> lock(queueMutex);
+<<<<<<< HEAD
         cv.wait(lock, []{
             return !readyQueue.empty() || stopScheduler;
         });
@@ -264,123 +297,156 @@ void cpuWorker(int coreId) {
             continue;
         }
             
+=======
+        cv.wait(lock, []
+                { return !readyQueue.empty() || stopScheduler; });
+        if (stopScheduler && readyQueue.empty())
+            break;
+>>>>>>> 52e13169d9d579291272ff665f8b67d9218adfe8
 
         // Pop the next process
-        ExecutableScreen* execScreen = readyQueue.front();
+        ExecutableScreen *execScreen = readyQueue.front();
         readyQueue.pop();
         lock.unlock();
-        if (!execScreen) continue;
+        if (!execScreen)
+            continue;
 
         // Initialize log header if first time
         {
             std::ofstream headerOut(output_dir + "/" + execScreen->name + ".txt", std::ios::app);
-            if (headerOut.is_open()) {
+            if (headerOut.is_open())
+            {
                 headerOut << "Process name: " << execScreen->name << "\nLogs:\n\n";
             }
         }
 
         // Choose scheduling algorithm
-        if (schedulerAlgo == "rr") {
+        if (schedulerAlgo == "rr")
+        {
             // Round-Robin: execute up to 'quantum' instructions then requeue
             int slice = quantum;
-            while (slice > 0 && execScreen->instructionPointer < (int)execScreen->instructions.size()) {
-                Instruction& inst = execScreen->instructions[execScreen->instructionPointer];
+            while (slice > 0 && execScreen->instructionPointer < (int)execScreen->instructions.size())
+            {
+                Instruction &inst = execScreen->instructions[execScreen->instructionPointer];
                 std::string logEntry;
                 // --- Instruction handling (same as FCFS) ---
-                switch (inst.type) {
-                    case InstructionType::DECLARE:{
-                        execScreen->memory.vars[inst.var1] = inst.value;
-                        logEntry = "Declared " + inst.var1 + " = " + std::to_string(inst.value);
-                        break;
-                    }
-                    case InstructionType::PRINT: {
-                        std::ostringstream log;
-                        log << inst.message;
-                        std::cout << "\n";
+                switch (inst.type)
+                {
+                case InstructionType::DECLARE:
+                {
+                    execScreen->memory.vars[inst.var1] = inst.value;
+                    logEntry = "Declared " + inst.var1 + " = " + std::to_string(inst.value);
+                    break;
+                }
+                case InstructionType::PRINT:
+                {
+                    std::ostringstream log;
+                    log << inst.message;
+                    std::cout << "\n";
 
-                        if (!inst.var1.empty()) {
-                            auto it = execScreen->memory.vars.find(inst.var1);
-                            if (it != execScreen->memory.vars.end()) {
-                                log << it->second;
-                            } else {
-                                log << "[undefined var: " << inst.var1 << "]";
-                            }
-                        }
-
-                        logEntry = log.str();
-                        break;
-                    }
-                    case InstructionType::ADD: {
-                        uint16_t a = execScreen->memory.vars[inst.var2];
-                        uint16_t b = execScreen->memory.vars[inst.var3];
-                        execScreen->memory.vars[inst.var1] = a + b;
-                        logEntry = "Added: " + inst.var1 + " = " + std::to_string(execScreen->memory.vars[inst.var1]);
-                        break;
-                    }
-                    case InstructionType::SUBTRACT: {
-                        uint16_t a = execScreen->memory.vars[inst.var2];
-                        uint16_t b = execScreen->memory.vars[inst.var3];
-                        execScreen->memory.vars[inst.var1] = a - b;
-                        logEntry = "Subtracted: " + inst.var1 + " = " + std::to_string(execScreen->memory.vars[inst.var1]);
-                        break;
-                    }
-                    case InstructionType::SLEEP: {
-                        std::this_thread::sleep_for(std::chrono::milliseconds(inst.sleepTicks * delayPerExec));
-                        logEntry = "Slept for " + std::to_string(inst.sleepTicks) + " ticks.";
-                        break;
-                    }
-                    case InstructionType::WRITE: {
-                        std::string address = inst.var1; // e.g. "0x500"
-
-                        if (!isValidMemoryAccess(execScreen->name, address)) {
-                            shutdownProcess(*execScreen, address);
-                            return;
-                        }
-                        std::string valRef  = inst.var2; // either a number or a variable
-
-                        uint16_t val = 0;
-                        if (execScreen->memory.vars.count(valRef)) {
-                            val = execScreen->memory.vars[valRef];
-                        } else {
-                            try {
-                                val = static_cast<uint16_t>(std::stoi(valRef));
-                            } catch (...) {
-                                logEntry = "WRITE failed: value not found.";
-                                break;
-                            }
-                        }
-
+                    if (!inst.var1.empty())
+                    {
+                        auto it = execScreen->memory.vars.find(inst.var1);
+                        if (it != execScreen->memory.vars.end())
                         {
-                            std::lock_guard<std::mutex> lock(physicalMemoryMutex);
-                            physicalMemory[address] = val;
+                            log << it->second;
                         }
-                        logEntry = "Wrote value " + std::to_string(val) + " to " + address;
-                        break;
-                    }
-                    case InstructionType::READ: {
-                        std::string varName = inst.var1;
-                        std::string address = inst.var2;
-
-                        if (!isValidMemoryAccess(execScreen->name, address)) {
-                            shutdownProcess(*execScreen, address);
-                            return;
-                        }
-                        uint16_t val = 0;
+                        else
                         {
-                            std::lock_guard<std::mutex> lock(physicalMemoryMutex);
-                            if (physicalMemory.count(address)) {
-                                val = physicalMemory[address];
-                            } else {
-                                val = 0; // uninitialized
-                            }
+                            log << "[undefined var: " << inst.var1 << "]";
                         }
-
-                        execScreen->memory.vars[varName] = val;
-                        logEntry = "Read value " + std::to_string(val) + " from " + address + " into " + varName;
-                        break;
                     }
-                    default:
-                        break;
+
+                    logEntry = log.str();
+                    break;
+                }
+                case InstructionType::ADD:
+                {
+                    uint16_t a = execScreen->memory.vars[inst.var2];
+                    uint16_t b = execScreen->memory.vars[inst.var3];
+                    execScreen->memory.vars[inst.var1] = a + b;
+                    logEntry = "Added: " + inst.var1 + " = " + std::to_string(execScreen->memory.vars[inst.var1]);
+                    break;
+                }
+                case InstructionType::SUBTRACT:
+                {
+                    uint16_t a = execScreen->memory.vars[inst.var2];
+                    uint16_t b = execScreen->memory.vars[inst.var3];
+                    execScreen->memory.vars[inst.var1] = a - b;
+                    logEntry = "Subtracted: " + inst.var1 + " = " + std::to_string(execScreen->memory.vars[inst.var1]);
+                    break;
+                }
+                case InstructionType::SLEEP:
+                {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(inst.sleepTicks * delayPerExec));
+                    logEntry = "Slept for " + std::to_string(inst.sleepTicks) + " ticks.";
+                    break;
+                }
+                case InstructionType::WRITE:
+                {
+                    std::string address = inst.var1; // e.g. "0x500"
+
+                    if (!isValidMemoryAccess(execScreen->name, address))
+                    {
+                        shutdownProcess(*execScreen, address);
+                        return;
+                    }
+                    std::string valRef = inst.var2; // either a number or a variable
+
+                    uint16_t val = 0;
+                    if (execScreen->memory.vars.count(valRef))
+                    {
+                        val = execScreen->memory.vars[valRef];
+                    }
+                    else
+                    {
+                        try
+                        {
+                            val = static_cast<uint16_t>(std::stoi(valRef));
+                        }
+                        catch (...)
+                        {
+                            logEntry = "WRITE failed: value not found.";
+                            break;
+                        }
+                    }
+
+                    {
+                        std::lock_guard<std::mutex> lock(physicalMemoryMutex);
+                        physicalMemory[address] = val;
+                    }
+                    logEntry = "Wrote value " + std::to_string(val) + " to " + address;
+                    break;
+                }
+                case InstructionType::READ:
+                {
+                    std::string varName = inst.var1;
+                    std::string address = inst.var2;
+
+                    if (!isValidMemoryAccess(execScreen->name, address))
+                    {
+                        shutdownProcess(*execScreen, address);
+                        return;
+                    }
+                    uint16_t val = 0;
+                    {
+                        std::lock_guard<std::mutex> lock(physicalMemoryMutex);
+                        if (physicalMemory.count(address))
+                        {
+                            val = physicalMemory[address];
+                        }
+                        else
+                        {
+                            val = 0; // uninitialized
+                        }
+                    }
+
+                    execScreen->memory.vars[varName] = val;
+                    logEntry = "Read value " + std::to_string(val) + " from " + address + " into " + varName;
+                    break;
+                }
+                default:
+                    break;
                 }
                 // --- End instruction handling ---
 
@@ -390,7 +456,8 @@ void cpuWorker(int coreId) {
                 execScreen->cpuId = coreId;
                 execScreen->lastLogTime = getCurrentDateTime();
                 std::ofstream outFile(output_dir + "/" + execScreen->name + ".txt", std::ios::app);
-                if (outFile.is_open()) {
+                if (outFile.is_open())
+                {
                     outFile << "(" << execScreen->lastLogTime << ") Core:" << coreId << " " << logEntry << "\n";
                 }
                 std::this_thread::sleep_for(std::chrono::milliseconds(delayPerExec));
@@ -399,11 +466,17 @@ void cpuWorker(int coreId) {
                 slice--;
                 static int snapshotCounter = 0;
                 snapshotCounter++;
+<<<<<<< HEAD
                 if (snapshotCounter % quantum == 0) {
+=======
+                if (snapshotCounter % quantum == 0)
+                {
+>>>>>>> 52e13169d9d579291272ff665f8b67d9218adfe8
                     std::ofstream snap("memory_stamp_" + std::to_string(snapshotCounter) + ".txt");
                     snap << "Timestamp: (" << getCurrentDateTime() << ")\n";
 
                     int inMemCount = 0;
+<<<<<<< HEAD
                     for (const auto& b : memoryBlocks)
                         if (!b.owner.empty()) inMemCount++;
                     snap << "Number of processes in memory: " << inMemCount << "\n";
@@ -411,84 +484,123 @@ void cpuWorker(int coreId) {
                     int externalFrag = 0;
                     for (const auto& b : memoryBlocks)
                         if (b.owner.empty()) externalFrag += b.size;
+=======
+                    for (const auto &b : memoryBlocks)
+                        if (!b.owner.empty())
+                            inMemCount++;
+                    snap << "Number of processes in memory: " << inMemCount << "\n";
+
+                    int externalFrag = 0;
+                    for (const auto &b : memoryBlocks)
+                        if (b.owner.empty())
+                            externalFrag += b.size;
+>>>>>>> 52e13169d9d579291272ff665f8b67d9218adfe8
                     snap << "Total external fragmentation in KB: " << externalFrag / 1024 << "\n\n";
 
                     snap << "----end---- = " << MEM_TOTAL << "\n";
                     int cur = MEM_TOTAL;
+<<<<<<< HEAD
                     for (auto it = memoryBlocks.rbegin(); it != memoryBlocks.rend(); ++it) {
                         if (!it->owner.empty()) {
                             snap << cur << "\n" << it->owner << "\n" << (cur - it->size) << "\n";
+=======
+                    for (auto it = memoryBlocks.rbegin(); it != memoryBlocks.rend(); ++it)
+                    {
+                        if (!it->owner.empty())
+                        {
+                            snap << cur << "\n"
+                                 << it->owner << "\n"
+                                 << (cur - it->size) << "\n";
+>>>>>>> 52e13169d9d579291272ff665f8b67d9218adfe8
                         }
                         cur -= it->size;
                     }
                     snap << "----start---- = 0\n";
                 }
+<<<<<<< HEAD
 
             }
             if (execScreen->instructionPointer < (int)execScreen->instructions.size()) {
+=======
+            }
+            if (execScreen->instructionPointer < (int)execScreen->instructions.size())
+            {
+>>>>>>> 52e13169d9d579291272ff665f8b67d9218adfe8
                 // not finished: re-enqueue for next round
                 std::lock_guard<std::mutex> requeueLock(queueMutex);
                 readyQueue.push(execScreen);
                 cv.notify_one();
-            } else {
+            }
+            else
+            {
                 freeMemory(execScreen->name);
                 execScreen->finishedTime = getCurrentDateTime();
             }
-        } else {
+        }
+        else
+        {
             // FCFS: execute until completion
-            while (execScreen->instructionPointer < (int)execScreen->instructions.size()) {
-                Instruction& inst = execScreen->instructions[execScreen->instructionPointer];
+            while (execScreen->instructionPointer < (int)execScreen->instructions.size())
+            {
+                Instruction &inst = execScreen->instructions[execScreen->instructionPointer];
                 std::string logEntry;
                 // [Same instruction handling switch as above]
-                switch (inst.type) {
-                    case InstructionType::DECLARE:
-                        execScreen->memory.vars[inst.var1] = inst.value;
-                        logEntry = "Declared " + inst.var1 + " = " + std::to_string(inst.value);
-                        break;
-                    case InstructionType::PRINT:
-                        if (inst.message.find("Hello world from") != std::string::npos) {
-                            logEntry = inst.message;
-                        } else {
-                            logEntry = inst.message;
-                            logEntry += execScreen->memory.vars.count(inst.var1)
-                                ? std::to_string(execScreen->memory.vars[inst.var1])
-                                : std::string("undefined");
-                        }
-                        break;
+                switch (inst.type)
+                {
+                case InstructionType::DECLARE:
+                    execScreen->memory.vars[inst.var1] = inst.value;
+                    logEntry = "Declared " + inst.var1 + " = " + std::to_string(inst.value);
+                    break;
+                case InstructionType::PRINT:
+                    if (inst.message.find("Hello world from") != std::string::npos)
+                    {
+                        logEntry = inst.message;
+                    }
+                    else
+                    {
+                        logEntry = inst.message;
+                        logEntry += execScreen->memory.vars.count(inst.var1)
+                                        ? std::to_string(execScreen->memory.vars[inst.var1])
+                                        : std::string("undefined");
+                    }
+                    break;
 
-                    case InstructionType::ADD: {
-                        uint16_t a = execScreen->memory.vars[inst.var2];
-                        uint16_t b = execScreen->memory.vars[inst.var3];
-                        execScreen->memory.vars[inst.var1] = a + b;
-                        logEntry = "Added: " + inst.var1 + " = " + std::to_string(execScreen->memory.vars[inst.var1]);
-                        break;
-                    }
-                    case InstructionType::SUBTRACT: {
-                        uint16_t a = execScreen->memory.vars[inst.var2];
-                        uint16_t b = execScreen->memory.vars[inst.var3];
-                        execScreen->memory.vars[inst.var1] = a - b;
-                        logEntry = "Subtracted: " + inst.var1 + " = " + std::to_string(execScreen->memory.vars[inst.var1]);
-                        break;
-                    }
-                    case InstructionType::SLEEP:
-                        std::this_thread::sleep_for(std::chrono::milliseconds(inst.sleepTicks * delayPerExec));
-                        logEntry = "Slept for " + std::to_string(inst.sleepTicks) + " ticks.";
-                        break;
-                    default:
-                        break;
+                case InstructionType::ADD:
+                {
+                    uint16_t a = execScreen->memory.vars[inst.var2];
+                    uint16_t b = execScreen->memory.vars[inst.var3];
+                    execScreen->memory.vars[inst.var1] = a + b;
+                    logEntry = "Added: " + inst.var1 + " = " + std::to_string(execScreen->memory.vars[inst.var1]);
+                    break;
+                }
+                case InstructionType::SUBTRACT:
+                {
+                    uint16_t a = execScreen->memory.vars[inst.var2];
+                    uint16_t b = execScreen->memory.vars[inst.var3];
+                    execScreen->memory.vars[inst.var1] = a - b;
+                    logEntry = "Subtracted: " + inst.var1 + " = " + std::to_string(execScreen->memory.vars[inst.var1]);
+                    break;
+                }
+                case InstructionType::SLEEP:
+                    std::this_thread::sleep_for(std::chrono::milliseconds(inst.sleepTicks * delayPerExec));
+                    logEntry = "Slept for " + std::to_string(inst.sleepTicks) + " ticks.";
+                    break;
+                default:
+                    break;
                 }
                 execScreen->instructionPointer++;
                 execScreen->currentLine++;
                 execScreen->cpuId = coreId;
                 execScreen->lastLogTime = getCurrentDateTime();
                 std::ofstream outFile(output_dir + "/" + execScreen->name + ".txt", std::ios::app);
-                if (outFile.is_open()) {
+                if (outFile.is_open())
+                {
                     outFile << "(" << execScreen->lastLogTime << ") Core:" << coreId << " " << logEntry << "\n";
                 }
                 std::this_thread::sleep_for(std::chrono::milliseconds(delayPerExec));
             }
             freeMemory(execScreen->name);
-execScreen->finishedTime = getCurrentDateTime();
+            execScreen->finishedTime = getCurrentDateTime();
         }
     }
 }
@@ -544,48 +656,63 @@ void startPrintJob(std::deque<ExecutableScreen> &screens)
     // std::cout << "✅ Print job completed. Logs saved in: " << output_dir << "\n";
 }
 
-std::vector<Instruction> parseInstructionString(const std::string& raw, const std::string& procName) {
+std::vector<Instruction> parseInstructionString(const std::string &raw, const std::string &procName)
+{
     std::vector<Instruction> instructions;
     std::istringstream iss(raw);
     std::string inst;
 
-    while (std::getline(iss, inst, ';')) {
+    while (std::getline(iss, inst, ';'))
+    {
         std::istringstream tokenStream(inst);
         std::string type;
         tokenStream >> type;
         type.erase(type.find_last_not_of(" \t\n\r\"") + 1); // trim right
-        type.erase(0, type.find_first_not_of(" \t\n\r\"")); // trim left    
-        if (type.find("PRINT") == 0) type = "PRINT";
+        type.erase(0, type.find_first_not_of(" \t\n\r\"")); // trim left
+        if (type.find("PRINT") == 0)
+            type = "PRINT";
 
-
-        if (type == "DECLARE") {
+        if (type == "DECLARE")
+        {
             Instruction ins{InstructionType::DECLARE};
             tokenStream >> ins.var1 >> ins.value;
             instructions.push_back(ins);
-        } else if (type == "ADD") {
+        }
+        else if (type == "ADD")
+        {
             Instruction ins{InstructionType::ADD};
             tokenStream >> ins.var1 >> ins.var2 >> ins.var3;
             instructions.push_back(ins);
-        } else if (type == "SUBTRACT") {
+        }
+        else if (type == "SUBTRACT")
+        {
             Instruction ins{InstructionType::SUBTRACT};
             tokenStream >> ins.var1 >> ins.var2 >> ins.var3;
             instructions.push_back(ins);
-        } else if (type == "SLEEP") {
+        }
+        else if (type == "SLEEP")
+        {
             Instruction ins{InstructionType::SLEEP};
             int ticks;
             tokenStream >> ticks;
             ins.sleepTicks = static_cast<uint8_t>(ticks);
             instructions.push_back(ins);
-        } else if (type == "PRINT") {
+        }
+        else if (type == "PRINT")
+        {
             Instruction ins{InstructionType::PRINT};
             std::string fullLine = inst.substr(inst.find("PRINT") + 5); // Skip "PRINT"
 
-            if (fullLine.empty()) {
+            if (fullLine.empty())
+            {
                 ins.message = "Hello world from " + procName + "!";
-            } else {
+            }
+            else
+            {
                 // Remove quotes and trim
                 size_t plusPos = fullLine.find('+');
-                if (plusPos != std::string::npos) {
+                if (plusPos != std::string::npos)
+                {
                     std::string msgPart = fullLine.substr(0, plusPos);
                     std::string varPart = fullLine.substr(plusPos + 1);
 
@@ -594,21 +721,22 @@ std::vector<Instruction> parseInstructionString(const std::string& raw, const st
                     msgPart.erase(msgPart.find_last_not_of(" \t\"") + 1);
                     // Also remove starting ( or trailing )
                     msgPart.erase(
-                        std::remove_if(msgPart.begin(), msgPart.end(), [](char c) {
-                            return c == '"' || c == '(' || c == ')';
-                        }),
-                        msgPart.end()
-                    );
+                        std::remove_if(msgPart.begin(), msgPart.end(), [](char c)
+                                       { return c == '"' || c == '(' || c == ')'; }),
+                        msgPart.end());
 
                     varPart.erase(0, varPart.find_first_not_of(" \t\""));
                     varPart.erase(varPart.find_last_not_of(" \t\"") + 1);
-                    if (!varPart.empty() && !std::isalnum(varPart.back())) {
+                    if (!varPart.empty() && !std::isalnum(varPart.back()))
+                    {
                         varPart.pop_back();
                     }
 
                     ins.message = msgPart;
                     ins.var1 = varPart;
-                } else {
+                }
+                else
+                {
                     // pure string print
                     fullLine.erase(0, fullLine.find_first_not_of(" \t\""));
                     fullLine.erase(fullLine.find_last_not_of(" \t\"") + 1);
@@ -617,27 +745,31 @@ std::vector<Instruction> parseInstructionString(const std::string& raw, const st
             }
             ins.message.erase(
                 std::remove(ins.message.begin(), ins.message.end(), '\\'),
-                ins.message.end()
-            );
+                ins.message.end());
             instructions.push_back(ins);
-        } else if (type == "WRITE") {
+        }
+        else if (type == "WRITE")
+        {
             Instruction ins{InstructionType::WRITE};
             tokenStream >> ins.var1 >> ins.var2;
             instructions.push_back(ins);
-        } else if (type == "READ") {
+        }
+        else if (type == "READ")
+        {
             Instruction ins{InstructionType::READ};
             tokenStream >> ins.var1 >> ins.var2;
             instructions.push_back(ins);
         }
-
     }
 
     return instructions;
 }
 
-void readConfigFile(const std::string& filename) {
+void readConfigFile(const std::string &filename)
+{
     std::ifstream file(filename);
-    if (!file) {
+    if (!file)
+    {
         std::cerr << "Error opening " << filename << "\n";
         return;
     }
@@ -645,38 +777,60 @@ void readConfigFile(const std::string& filename) {
     std::string param;
     std::cout << "Loaded config parameters:\n";
 
-    while (file >> param) {
-        if (param == "num-cpu") {
+    while (file >> param)
+    {
+        if (param == "num-cpu")
+        {
             file >> CPU_CORES;
             std::cout << " - num-cpu: " << CPU_CORES << "\n";
-        } else if (param == "scheduler") {
+        }
+        else if (param == "scheduler")
+        {
             file >> schedulerAlgo;
             std::cout << " - scheduler: " << schedulerAlgo << "\n";
-        } else if (param == "quantum-cycles") {
+        }
+        else if (param == "quantum-cycles")
+        {
             file >> quantum;
             std::cout << " - quantum-cycles: " << quantum << "\n";
-        } else if (param == "batch-process-freq") {
+        }
+        else if (param == "batch-process-freq")
+        {
             file >> batchFreq;
             std::cout << " - batch-process-freq: " << batchFreq << "\n";
-        } else if (param == "min-ins") {
+        }
+        else if (param == "min-ins")
+        {
             file >> minInstructions;
             std::cout << " - min-ins: " << minInstructions << "\n";
-        } else if (param == "max-ins") {
+        }
+        else if (param == "max-ins")
+        {
             file >> maxInstructions;
             std::cout << " - max-ins: " << maxInstructions << "\n";
-        } else if (param == "delay-per-exec") {
+        }
+        else if (param == "delay-per-exec")
+        {
             file >> delayPerExec;
             std::cout << " - delay-per-exec: " << delayPerExec << "\n";
-        } else if (param == "max-overall-mem") {
+        }
+        else if (param == "max-overall-mem")
+        {
             file >> MEM_TOTAL;
             std::cout << " - max-overall-mem: " << MEM_TOTAL << "\n";
-        } else if (param == "mem-per-frame") {
+        }
+        else if (param == "mem-per-frame")
+        {
             file >> MEM_FRAME_SIZE;
             std::cout << " - mem-per-frame: " << MEM_FRAME_SIZE << "\n";
-        } else if (param == "mem-per-proc") {
+        }
+        else if (param == "mem-per-proc")
+        {
             file >> MEM_PER_PROC;
             std::cout << " - mem-per-proc: " << MEM_PER_PROC << "\n";
-        } else {
+        }
+        else
+        {
             std::string junk;
             file >> junk;
             std::cout << "Unknown config parameter: " << param << " = " << junk << "\n";
@@ -684,28 +838,34 @@ void readConfigFile(const std::string& filename) {
     }
 }
 
-std::vector<Instruction> generateRandomInstructions(int count, const std::string& processName = "") {
+std::vector<Instruction> generateRandomInstructions(int count, const std::string &processName = "")
+{
     std::vector<Instruction> instructions;
     std::vector<std::string> vars = {"x", "y", "z"};
 
-    for (int i = 0; i < count; ++i) {
+    for (int i = 0; i < count; ++i)
+    {
         int type = getRand(0, 4);
-        switch (type) {
-        case 0: { // DECLARE
+        switch (type)
+        {
+        case 0:
+        { // DECLARE
             Instruction inst{InstructionType::DECLARE};
             inst.var1 = vars[getRand(0, 2)];
             inst.value = getRand(1, 100);
             instructions.push_back(inst);
             break;
         }
-        case 1: { // PRINT
+        case 1:
+        { // PRINT
             Instruction inst{InstructionType::PRINT};
             inst.var1 = vars[getRand(0, 2)];
             inst.message = "Hello world from " + processName + "!";
             instructions.push_back(inst);
             break;
         }
-        case 2: { // ADD
+        case 2:
+        { // ADD
             Instruction inst{InstructionType::ADD};
             inst.var1 = vars[getRand(0, 2)];
             inst.var2 = vars[getRand(0, 2)];
@@ -713,7 +873,8 @@ std::vector<Instruction> generateRandomInstructions(int count, const std::string
             instructions.push_back(inst);
             break;
         }
-        case 3: { // SUBTRACT
+        case 3:
+        { // SUBTRACT
             Instruction inst{InstructionType::SUBTRACT};
             inst.var1 = vars[getRand(0, 2)];
             inst.var2 = vars[getRand(0, 2)];
@@ -721,7 +882,8 @@ std::vector<Instruction> generateRandomInstructions(int count, const std::string
             instructions.push_back(inst);
             break;
         }
-        case 4: { // SLEEP
+        case 4:
+        { // SLEEP
             Instruction inst{InstructionType::SLEEP};
             inst.sleepTicks = getRand(1, 3);
             instructions.push_back(inst);
@@ -735,9 +897,9 @@ std::vector<Instruction> generateRandomInstructions(int count, const std::string
 
 int main()
 {
-    bool isInitialized = false; 
+    bool isInitialized = false;
     // TODO: Read config file and store said parameters. Replace any that can be used from FCFS implementation.
-    // Said parameters are crucial and relevant to scheduling. 
+    // Said parameters are crucial and relevant to scheduling.
     printHeader();
     std::string cmd;
     std::deque<ExecutableScreen> screens;
@@ -750,7 +912,7 @@ int main()
     std::ostringstream report_stream;
 
     while (true)
-    {   
+    {
         std::cout << "Enter a command: ";
         if (!std::getline(std::cin, cmd))
             break;
@@ -763,7 +925,8 @@ int main()
             command.push_back(token);
         }
 
-        if (!isInitialized && !(command[0] == "initialize")) {
+        if (!isInitialized && !(command[0] == "initialize"))
+        {
             std::cout << "Please run the 'initialize' command first.\n";
             continue;
         }
@@ -780,7 +943,8 @@ int main()
             {
                 schedulerRunning = true;
 
-                schedulerGeneratorThread = std::thread([&screens]() {
+                schedulerGeneratorThread = std::thread([&screens]()
+                                                       {
                     int nextPid = 1;
                     while (schedulerRunning) {
                         ExecutableScreen exec{};
@@ -789,7 +953,7 @@ int main()
                                             getRand(minInstructions, maxInstructions), exec.name);
                         exec.totalLines    = exec.instructions.size();
                         exec.createdDate   = getCurrentDateTime();
-                        int allocStart = allocateMemory(exec.name);
+                        int allocStart = allocateMemory(exec.name, MEM_PER_PROC);
                         if (allocStart == -1) {
                             // std::cout << "No memory for " << exec.name << ", requeueing.\n";
                             std::this_thread::sleep_for(std::chrono::milliseconds(batchFreq * delayPerExec));
@@ -811,14 +975,15 @@ int main()
 
                         std::this_thread::sleep_for(
                             std::chrono::milliseconds(batchFreq * delayPerExec));
-                    }
-                });
+                    } });
 
-                if (!isPrinting) {
+                if (!isPrinting)
+                {
                     isPrinting = true;
                     stopScheduler = false;
                     // Spawn CPU workers once
-                    for (int i = 0; i < CPU_CORES; ++i) {
+                    for (int i = 0; i < CPU_CORES; ++i)
+                    {
                         cpuThreads.emplace_back(cpuWorker, i);
                     }
                 }
@@ -837,21 +1002,20 @@ int main()
                 // Stop generating
                 schedulerRunning = false;
                 if (schedulerGeneratorThread.joinable())
-                schedulerGeneratorThread.join();
+                    schedulerGeneratorThread.join();
 
                 // Tell CPU workers to quit once the queue is empty
                 {
-                std::lock_guard<std::mutex> lock(queueMutex);
-                stopScheduler = true;
+                    std::lock_guard<std::mutex> lock(queueMutex);
+                    stopScheduler = true;
                 }
                 cv.notify_all();
 
                 // Join all worker threads
                 for (auto &t : cpuThreads)
-                t.join();
+                    t.join();
                 cpuThreads.clear();
                 isPrinting = false;
-
             }
             else
             {
@@ -872,32 +1036,42 @@ int main()
                 break;
             }
         }
-        else if (command[0] == "process-smi") {
-            if (currentScreen.name == "Main Menu") {
+        else if (command[0] == "process-smi")
+        {
+            if (currentScreen.name == "Main Menu")
+            {
                 std::cout << "Cannot do this in the main menu";
             }
-            else {
+            else
+            {
                 // Find the live process in your master list
                 auto it = std::find_if(
                     screens.begin(), screens.end(),
-                    [&](const ExecutableScreen &s) { return s.name == currentScreen.name; }
-                );
-                if (it != screens.end()) {
+                    [&](const ExecutableScreen &s)
+                    { return s.name == currentScreen.name; });
+                if (it != screens.end())
+                {
                     auto &proc = *it;
                     std::cout << "Process: " << proc.name;
-                    if (proc.currentLine < proc.totalLines) {
+                    if (proc.currentLine < proc.totalLines)
+                    {
                         std::cout << " (Running)\n";
                         std::cout << "  Executed " << proc.currentLine << " / " << proc.totalLines << " instructions\n";
-                    } else {
+                    }
+                    else
+                    {
                         std::cout << " (Finished)\n";
                     }
                     std::cout << "  Last Log Time: " << proc.lastLogTime << "\n";
                     std::cout << "  CPU Core: " << proc.cpuId << "\n";
                     std::cout << "  Variables:\n";
-                    for (auto &kv : proc.memory.vars) {
+                    for (auto &kv : proc.memory.vars)
+                    {
                         std::cout << "    " << kv.first << " = " << kv.second << "\n";
                     }
-                } else {
+                }
+                else
+                {
                     std::cout << "Process " << currentScreen.name << " not found.\n";
                 }
             }
@@ -928,19 +1102,19 @@ int main()
         }
         else if (command[0] == "screen" && currentScreen.name == "Main Menu")
         {
-            if (command[1] == "-s" && command.size() == 3) 
+            if (command[1] == "-s" && command.size() == 3)
             {
                 ExecutableScreen proc = createScreen(command[2]);
 
                 proc.instructions = generateRandomInstructions(
-                                    getRand(minInstructions, maxInstructions));
+                    getRand(minInstructions, maxInstructions));
 
                 proc.totalLines = static_cast<int>(proc.instructions.size());
                 {
                     std::lock_guard<std::mutex> lg(screensMutex);
                     screens.push_back(std::move(proc));
                     // **Immediately** enqueue the new process:
-                    ExecutableScreen* p = &screens.back();
+                    ExecutableScreen *p = &screens.back();
                     {
                         std::lock_guard<std::mutex> ql(queueMutex);
                         readyQueue.push(p);
@@ -952,6 +1126,45 @@ int main()
                 clearScreen();
                 printScreen(proc);
             }
+            else if (command[1] == "-s" && command.size() == 4)
+            {
+                std::string procName = command[2];
+                int memSize = std::stoi(command[3]);
+
+                if (memSize < 64 || memSize > 8192 || (memSize & (memSize - 1)) != 0)
+                {
+                    std::cout << "Invalid memory allocation.\n";
+                    continue;
+                }
+
+                ExecutableScreen proc = createScreen(procName);
+                proc.memorySize = memSize;
+                proc.instructions = generateRandomInstructions(
+                    getRand(minInstructions, maxInstructions), procName);
+                proc.totalLines = static_cast<int>(proc.instructions.size());
+
+                int allocStart = allocateMemory(procName, memSize);
+                if (allocStart == -1)
+                {
+                    std::cout << "Memory allocation failed.\n";
+                    continue;
+                }
+
+                {
+                    std::lock_guard<std::mutex> lg(screensMutex);
+                    screens.push_back(std::move(proc));
+                    ExecutableScreen *p = &screens.back();
+                    {
+                        std::lock_guard<std::mutex> ql(queueMutex);
+                        readyQueue.push(p);
+                    }
+                    cv.notify_one();
+                }
+
+                currentScreen = screens.back();
+                clearScreen();
+                printScreen(currentScreen);
+            }
             else if (command[1] == "-r" && command.size() == 3)
             {
                 bool found = false;
@@ -962,7 +1175,8 @@ int main()
                         currentScreen = s;
                         clearScreen();
                         printScreen(s);
-                        if (s.isShutdown) {
+                        if (s.isShutdown)
+                        {
                             std::cout << s.shutdownMessage << "\n";
                         }
                         found = true;
@@ -1029,13 +1243,14 @@ int main()
 
                 report_stream.clear();
             }
-            else if (command[1]=="-c" && command.size() >= 4)
+            else if (command[1] == "-c" && command.size() >= 4)
             {
                 std::string procName = command[2];
                 int memSize = std::stoi(command[3]);
 
                 // Memory validation
-                if (memSize < 64 || memSize > 8192 || (memSize & (memSize - 1)) != 0) {
+                if (memSize < 64 || memSize > 8192 || (memSize & (memSize - 1)) != 0)
+                {
                     std::cout << "Invalid memory allocation.\n";
                     return 0;
                 }
@@ -1044,26 +1259,31 @@ int main()
                 size_t firstQuote = cmd.find("\"");
                 size_t lastQuote = cmd.rfind("\"");
                 std::string rawInstructions;
-                if (firstQuote != std::string::npos && lastQuote != std::string::npos && lastQuote > firstQuote) {
+                if (firstQuote != std::string::npos && lastQuote != std::string::npos && lastQuote > firstQuote)
+                {
                     rawInstructions = cmd.substr(firstQuote + 1, lastQuote - firstQuote - 1);
-                } else {
+                }
+                else
+                {
                     std::cout << "Invalid instruction format.\n";
                     continue;
                 }
 
-
                 ExecutableScreen proc = createScreen(procName);
                 proc.instructions = parseInstructionString(rawInstructions, procName);
 
-                if (proc.instructions.size() < 1 || proc.instructions.size() > 50) {
+                if (proc.instructions.size() < 1 || proc.instructions.size() > 50)
+                {
                     std::cout << "Number of instructions should be between 1-50\n";
                     continue;
                 }
 
                 proc.totalLines = static_cast<int>(proc.instructions.size());
 
-                int allocStart = allocateMemory(procName);
-                if (allocStart == -1) {
+                proc.memorySize = memSize;
+                int allocStart = allocateMemory(procName, memSize);
+                if (allocStart == -1)
+                {
                     std::cout << "Memory allocation failed.\n";
                     return 0;
                 }
@@ -1071,7 +1291,7 @@ int main()
                 {
                     std::lock_guard<std::mutex> lg(screensMutex);
                     screens.push_back(std::move(proc));
-                    ExecutableScreen* p = &screens.back();
+                    ExecutableScreen *p = &screens.back();
                     {
                         std::lock_guard<std::mutex> ql(queueMutex);
                         readyQueue.push(p);
@@ -1079,27 +1299,31 @@ int main()
                     cv.notify_one();
                 }
 
-                if (!isPrinting) {
+                if (!isPrinting)
+                {
                     isPrinting = true;
                     stopScheduler = false;
-                    for (int i = 0; i < CPU_CORES; ++i) {
+                    for (int i = 0; i < CPU_CORES; ++i)
+                    {
                         cpuThreads.emplace_back(cpuWorker, i);
                     }
-                }       
+                }
 
                 currentScreen = screens.back();
                 clearScreen();
                 printScreen(currentScreen);
             }
         }
-        else if (command[0] == "generate" && command.size() == 2) {
+        else if (command[0] == "generate" && command.size() == 2)
+        {
             int n = std::stoi(command[1]);
-            for (int i = 0; i < n; ++i) {
-                std::string pname = "p" + std::to_string(i+1);  
+            for (int i = 0; i < n; ++i)
+            {
+                std::string pname = "p" + std::to_string(i + 1);
                 ExecutableScreen proc = createScreen(pname);
                 // ← assign real instructions here:
                 proc.instructions = generateRandomInstructions(
-                                    getRand(minInstructions, maxInstructions), pname);
+                    getRand(minInstructions, maxInstructions), pname);
                 // optional: make totalLines match actual instruction count
                 proc.totalLines = static_cast<int>(proc.instructions.size());
                 {
@@ -1109,14 +1333,14 @@ int main()
             }
             std::cout << "Generated " << n << " processes!\n";
         }
-        else if (command[0] == "report-util") 
+        else if (command[0] == "report-util")
         {
             namespace fs = std::filesystem;
             std::ofstream writeReport(report_file_name);
             writeReport << report_util;
             writeReport.close();
             std::cout << "Report generated at " << fs::path(report_file_name) << "!\n";
-            report_util.clear(); 
+            report_util.clear();
         }
         else if (command[0] == "print")
         {
