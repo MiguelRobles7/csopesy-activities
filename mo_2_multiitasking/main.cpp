@@ -62,6 +62,15 @@ struct MemoryBlock
 std::vector<MemoryBlock> memoryBlocks = {{0, MEM_TOTAL, ""}}; // initially all free
 std::mutex memMutex;
 
+struct FrameTableEntry
+{
+    bool occupied = false;
+    std::string ownerProcess;
+    int virtualPageNumber = -1; // which page of the process is stored here
+};
+
+std::vector<FrameTableEntry> frameTable;
+
 bool isValidMemoryAccess(const std::string &procName, const std::string &hexAddress)
 {
     // Convert hex string to int
@@ -212,6 +221,15 @@ struct ExecutableScreen : public Screen
     bool isShutdown = false;
     std::string shutdownMessage;
     int memorySize = 0;
+
+    struct PageTableEntry
+    {
+        bool present = false;
+        int frameNumber = -1;
+        bool dirty = false;
+    };
+
+    std::unordered_map<int, PageTableEntry> pageTable; // key = virtual page number
 };
 
 ExecutableScreen createScreen(std::string name)
@@ -786,6 +804,10 @@ void readConfigFile(const std::string &filename)
             std::cout << "Unknown config parameter: " << param << " = " << junk << "\n";
         }
     }
+
+    int totalFrames = MEM_TOTAL / MEM_FRAME_SIZE;
+    frameTable = std::vector<FrameTableEntry>(totalFrames);
+    std::cout << " - total-frames: " << totalFrames << "\n";
 }
 
 std::vector<Instruction> generateRandomInstructions(int count, const std::string &processName = "")
