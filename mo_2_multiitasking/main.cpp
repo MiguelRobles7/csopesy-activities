@@ -239,6 +239,7 @@ struct ExecutableScreen : public Screen
     bool isShutdown = false;
     std::string shutdownMessage;
     int memorySize = 0;
+    std::vector<std::string> consoleOutput;
 
     struct PageTableEntry
     {
@@ -280,6 +281,13 @@ void printScreen(const ExecutableScreen &screen)
     {
         std::cout << "  " << kv.first << " = " << kv.second << "\n";
     }
+    if (!screen.consoleOutput.empty()) {
+    std::cout << "Console Output:\n";
+    for (const auto& line : screen.consoleOutput) {
+        std::cout << "  " << line << "\n";
+    }
+}
+
 }
 
 void printHeader()
@@ -474,7 +482,6 @@ void cpuWorker(int coreId)
                 {
                     std::ostringstream log;
                     log << inst.message;
-                    std::cout << "\n";
 
                     if (!inst.var1.empty())
                     {
@@ -489,9 +496,14 @@ void cpuWorker(int coreId)
                         }
                     }
 
-                    logEntry = log.str();
+                    std::string output = log.str();
+                    execScreen->consoleOutput.push_back(output);
+
+                    logEntry = output;
+                    std::cout << logEntry << std::endl;
                     break;
                 }
+
                 case InstructionType::ADD:
                 {
                     uint16_t a = execScreen->memory.vars[inst.var2];
