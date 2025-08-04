@@ -500,7 +500,6 @@ void cpuWorker(int coreId)
                     execScreen->consoleOutput.push_back(output);
 
                     logEntry = output;
-                    std::cout << logEntry << std::endl;
                     break;
                 }
 
@@ -1145,7 +1144,7 @@ int main()
                 schedulerRunning = true;
 
                 schedulerGeneratorThread = std::thread([&screens]()
-                                                       {
+                {
                     int nextPid = 1;
                     while (schedulerRunning) {
                         ExecutableScreen exec{};
@@ -1185,7 +1184,7 @@ int main()
                         std::this_thread::sleep_for(
                             std::chrono::milliseconds(batchFreq * delayPerExec));
                     } });
-
+                schedulerGeneratorThread.detach();
                 if (!isPrinting)
                 {
                     isPrinting = true;
