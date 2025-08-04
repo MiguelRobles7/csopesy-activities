@@ -59,6 +59,49 @@ struct MemoryBlock {
 std::vector<MemoryBlock> memoryBlocks = {{0, MEM_TOTAL, ""}}; // initially all free
 std::mutex memMutex;
 
+bool isValidMemoryAccess(const std::string& procName, const std::string& hexAddress) {
+    // Convert hex string to int
+    int addr = 0;
+    try {
+        addr = std::stoi(hexAddress, nullptr, 16);
+    } catch (...) {
+        return false; // Invalid hex format
+    }
+
+    std::lock_guard<std::mutex> lock(memMutex);
+    for (const auto& block : memoryBlocks) {
+        if (block.owner == procName) {
+            if (addr >= block.start && addr < block.start + block.size) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+int getRand(int min, int max)
+{
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dist(min, max);
+    return dist(gen);
+}
+
+std::string getCurrentDateTime()
+{
+    time_t t = time(nullptr);
+    tm *tm_info = localtime(&t);
+    int hour = tm_info->tm_hour % 12;
+    if (hour == 0)
+        hour = 12;
+    const char *ampm = (tm_info->tm_hour >= 12) ? "PM" : "AM";
+    char buf[30];
+    snprintf(buf, sizeof(buf), "%02d/%02d/%04d %02d:%02d:%02d %s",
+             tm_info->tm_mon + 1, tm_info->tm_mday, tm_info->tm_year + 1900,
+             hour, tm_info->tm_min, tm_info->tm_sec, ampm);
+    return std::string(buf);
+}
+
 int allocateMemory(const std::string& procName) {
     std::lock_guard<std::mutex> lock(memMutex);
     for (auto& block : memoryBlocks) {
@@ -97,29 +140,6 @@ void freeMemory(const std::string& procName) {
             ++i;
         }
     }
-}
-
-int getRand(int min, int max)
-{
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<> dist(min, max);
-    return dist(gen);
-}
-
-std::string getCurrentDateTime()
-{
-    time_t t = time(nullptr);
-    tm *tm_info = localtime(&t);
-    int hour = tm_info->tm_hour % 12;
-    if (hour == 0)
-        hour = 12;
-    const char *ampm = (tm_info->tm_hour >= 12) ? "PM" : "AM";
-    char buf[30];
-    snprintf(buf, sizeof(buf), "%02d/%02d/%04d %02d:%02d:%02d %s",
-             tm_info->tm_mon + 1, tm_info->tm_mday, tm_info->tm_year + 1900,
-             hour, tm_info->tm_min, tm_info->tm_sec, ampm);
-    return std::string(buf);
 }
 
 struct Screen
@@ -166,6 +186,8 @@ struct ExecutableScreen : public Screen {
     ProcessMemory memory;
     int instructionPointer = 0;
     std::vector<std::pair<int, int>> forStack; // pair<index, remaining count>
+    bool isShutdown = false;
+    std::string shutdownMessage;
 };
 
 ExecutableScreen createScreen(std::string name)
@@ -177,6 +199,15 @@ ExecutableScreen createScreen(std::string name)
     newScreen.createdDate = getCurrentDateTime();
     newScreen.name = name;
     return newScreen;
+}
+
+
+void shutdownProcess(ExecutableScreen& proc, const std::string& offendingAddr) {
+    proc.isShutdown = true;
+    proc.finishedTime = getCurrentDateTime();
+    proc.shutdownMessage = "Process " + proc.name + " shut down due to memory access violation error that occurred at " +
+                           proc.finishedTime + ". " + offendingAddr + " invalid.";
+    freeMemory(proc.name);
 }
 
 void printScreen(const ExecutableScreen &screen)
@@ -291,6 +322,11 @@ void cpuWorker(int coreId) {
                     }
                     case InstructionType::WRITE: {
                         std::string address = inst.var1; // e.g. "0x500"
+
+                        if (!isValidMemoryAccess(execScreen->name, address)) {
+                            shutdownProcess(*execScreen, address);
+                            return;
+                        }
                         std::string valRef  = inst.var2; // either a number or a variable
 
                         uint16_t val = 0;
@@ -316,6 +352,10 @@ void cpuWorker(int coreId) {
                         std::string varName = inst.var1;
                         std::string address = inst.var2;
 
+                        if (!isValidMemoryAccess(execScreen->name, address)) {
+                            shutdownProcess(*execScreen, address);
+                            return;
+                        }
                         uint16_t val = 0;
                         {
                             std::lock_guard<std::mutex> lock(physicalMemoryMutex);
@@ -893,6 +933,9 @@ int main()
                         currentScreen = s;
                         clearScreen();
                         printScreen(s);
+                        if (s.isShutdown) {
+                            std::cout << s.shutdownMessage << "\n";
+                        }
                         found = true;
                         break;
                     }
