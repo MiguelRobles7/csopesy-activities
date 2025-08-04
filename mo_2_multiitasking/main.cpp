@@ -1288,7 +1288,7 @@ int main()
         }
         else if (command[0] == "screen" && currentScreen.name == "Main Menu")
         {
-            if (command[1] == "-s" && command.size() == 3)
+           /* if (command[1] == "-s" && command.size() == 3)
             {
                 ExecutableScreen proc = createScreen(command[2]);
 
@@ -1312,7 +1312,7 @@ int main()
                 clearScreen();
                 printScreen(proc);
             }
-            else if (command[1] == "-s" && command.size() == 4)
+            else */if (command[1] == "-s" && command.size() == 4)
             {
                 std::string procName = command[2];
                 int memSize = std::stoi(command[3]);
