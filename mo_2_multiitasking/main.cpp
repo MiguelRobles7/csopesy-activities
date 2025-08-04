@@ -423,6 +423,24 @@ void cpuWorker(int coreId)
                 {
                 case InstructionType::DECLARE:
                 {
+                    if (execScreen->memory.vars.size() >= 32)
+                    {
+                        logEntry = "DECLARE skipped: symbol table full.";
+                        break;
+                    }
+
+                    // Simulate address inside symbol table
+                    int varOffset = execScreen->memory.vars.size() * 2;
+                    int symbolTableAddress = varOffset;
+
+                    if (symbolTableAddress >= 64)
+                    {
+                        logEntry = "DECLARE failed: out of symbol table bounds.";
+                        break;
+                    }
+
+                    ensurePageLoaded(*execScreen, symbolTableAddress); // simulate demand loading
+
                     execScreen->memory.vars[inst.var1] = inst.value;
                     logEntry = "Declared " + inst.var1 + " = " + std::to_string(inst.value);
                     break;
@@ -473,14 +491,27 @@ void cpuWorker(int coreId)
                 }
                 case InstructionType::WRITE:
                 {
-                    std::string address = inst.var1; // e.g. "0x500"
+                    std::string address = inst.var1;
+                    std::string valRef = inst.var2;
 
-                    if (!isValidMemoryAccess(execScreen->name, address))
+                    int addr = 0;
+                    try
+                    {
+                        addr = std::stoi(address, nullptr, 16);
+                    }
+                    catch (...)
                     {
                         shutdownProcess(*execScreen, address);
                         return;
                     }
-                    std::string valRef = inst.var2; // either a number or a variable
+
+                    if (addr < 0 || addr >= MEM_TOTAL)
+                    {
+                        shutdownProcess(*execScreen, address);
+                        return;
+                    }
+
+                    ensurePageLoaded(*execScreen, addr); // simulate demand paging
 
                     uint16_t val = 0;
                     if (execScreen->memory.vars.count(valRef))
@@ -504,6 +535,7 @@ void cpuWorker(int coreId)
                         std::lock_guard<std::mutex> lock(physicalMemoryMutex);
                         physicalMemory[address] = val;
                     }
+
                     logEntry = "Wrote value " + std::to_string(val) + " to " + address;
                     break;
                 }
@@ -512,11 +544,25 @@ void cpuWorker(int coreId)
                     std::string varName = inst.var1;
                     std::string address = inst.var2;
 
-                    if (!isValidMemoryAccess(execScreen->name, address))
+                    int addr = 0;
+                    try
+                    {
+                        addr = std::stoi(address, nullptr, 16);
+                    }
+                    catch (...)
                     {
                         shutdownProcess(*execScreen, address);
                         return;
                     }
+
+                    if (addr < 0 || addr >= MEM_TOTAL)
+                    {
+                        shutdownProcess(*execScreen, address);
+                        return;
+                    }
+
+                    ensurePageLoaded(*execScreen, addr);
+
                     uint16_t val = 0;
                     {
                         std::lock_guard<std::mutex> lock(physicalMemoryMutex);
