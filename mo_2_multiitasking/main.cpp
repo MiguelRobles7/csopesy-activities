@@ -231,12 +231,8 @@ ExecutableScreen createScreen(std::string name)
     return newScreen;
 }
 
-<<<<<<< HEAD
-void shutdownProcess(ExecutableScreen& proc, const std::string& offendingAddr) {
-=======
 void shutdownProcess(ExecutableScreen &proc, const std::string &offendingAddr)
 {
->>>>>>> 52e13169d9d579291272ff665f8b67d9218adfe8
     proc.isShutdown = true;
     proc.finishedTime = getCurrentDateTime();
     proc.shutdownMessage = "Process " + proc.name + " shut down due to memory access violation error that occurred at " +
@@ -287,7 +283,6 @@ void cpuWorker(int coreId)
     {
         // Wait for a process to schedule
         std::unique_lock<std::mutex> lock(queueMutex);
-<<<<<<< HEAD
         cv.wait(lock, []{
             return !readyQueue.empty() || stopScheduler;
         });
@@ -297,12 +292,6 @@ void cpuWorker(int coreId)
             continue;
         }
             
-=======
-        cv.wait(lock, []
-                { return !readyQueue.empty() || stopScheduler; });
-        if (stopScheduler && readyQueue.empty())
-            break;
->>>>>>> 52e13169d9d579291272ff665f8b67d9218adfe8
 
         // Pop the next process
         ExecutableScreen *execScreen = readyQueue.front();
@@ -466,25 +455,12 @@ void cpuWorker(int coreId)
                 slice--;
                 static int snapshotCounter = 0;
                 snapshotCounter++;
-<<<<<<< HEAD
-                if (snapshotCounter % quantum == 0) {
-=======
                 if (snapshotCounter % quantum == 0)
                 {
->>>>>>> 52e13169d9d579291272ff665f8b67d9218adfe8
                     std::ofstream snap("memory_stamp_" + std::to_string(snapshotCounter) + ".txt");
                     snap << "Timestamp: (" << getCurrentDateTime() << ")\n";
 
                     int inMemCount = 0;
-<<<<<<< HEAD
-                    for (const auto& b : memoryBlocks)
-                        if (!b.owner.empty()) inMemCount++;
-                    snap << "Number of processes in memory: " << inMemCount << "\n";
-
-                    int externalFrag = 0;
-                    for (const auto& b : memoryBlocks)
-                        if (b.owner.empty()) externalFrag += b.size;
-=======
                     for (const auto &b : memoryBlocks)
                         if (!b.owner.empty())
                             inMemCount++;
@@ -494,16 +470,10 @@ void cpuWorker(int coreId)
                     for (const auto &b : memoryBlocks)
                         if (b.owner.empty())
                             externalFrag += b.size;
->>>>>>> 52e13169d9d579291272ff665f8b67d9218adfe8
                     snap << "Total external fragmentation in KB: " << externalFrag / 1024 << "\n\n";
 
                     snap << "----end---- = " << MEM_TOTAL << "\n";
                     int cur = MEM_TOTAL;
-<<<<<<< HEAD
-                    for (auto it = memoryBlocks.rbegin(); it != memoryBlocks.rend(); ++it) {
-                        if (!it->owner.empty()) {
-                            snap << cur << "\n" << it->owner << "\n" << (cur - it->size) << "\n";
-=======
                     for (auto it = memoryBlocks.rbegin(); it != memoryBlocks.rend(); ++it)
                     {
                         if (!it->owner.empty())
@@ -511,21 +481,14 @@ void cpuWorker(int coreId)
                             snap << cur << "\n"
                                  << it->owner << "\n"
                                  << (cur - it->size) << "\n";
->>>>>>> 52e13169d9d579291272ff665f8b67d9218adfe8
                         }
                         cur -= it->size;
                     }
                     snap << "----start---- = 0\n";
                 }
-<<<<<<< HEAD
-
-            }
-            if (execScreen->instructionPointer < (int)execScreen->instructions.size()) {
-=======
             }
             if (execScreen->instructionPointer < (int)execScreen->instructions.size())
             {
->>>>>>> 52e13169d9d579291272ff665f8b67d9218adfe8
                 // not finished: re-enqueue for next round
                 std::lock_guard<std::mutex> requeueLock(queueMutex);
                 readyQueue.push(execScreen);
