@@ -985,6 +985,21 @@ void readConfigFile(const std::string &filename)
         }
     }
 
+    // Reinitialize memory blocks
+    {
+        std::lock_guard<std::mutex> lock(memMutex);
+        memoryBlocks.clear();
+        memoryBlocks.push_back({0, MEM_TOTAL, ""});
+    }
+
+    // Reset page/frame system
+    {
+        std::lock_guard<std::mutex> lock(physicalMemoryMutex);
+        physicalMemory.clear();
+    }
+    frameTable.clear();
+    fifoFrameQueue = std::queue<int>();
+
     int totalFrames = MEM_TOTAL / MEM_FRAME_SIZE;
     frameTable = std::vector<FrameTableEntry>(totalFrames);
     std::cout << " - total-frames: " << totalFrames << "\n";
@@ -1548,6 +1563,11 @@ int main()
         }
         else if ((command[0] == "initialize"))
         {
+            totalTicks = 0;
+            activeTicks = 0;
+            idleTicks = 0;
+            pagesPagedIn = 0;
+            pagesPagedOut = 0;
             std::cout << command[0] << " command recognized. Doing something.\n";
             readConfigFile("config.txt");
             isInitialized = true;
