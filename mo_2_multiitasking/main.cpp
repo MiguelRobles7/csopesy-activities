@@ -55,7 +55,8 @@ std::atomic<int> pagesPagedOut{0};
 std::deque<std::thread> cpuThreads;
 int MEM_TOTAL = 16384;
 int MEM_FRAME_SIZE = 16;
-int MEM_PER_PROC = 4096;
+int MIN_MEM_PER_PROC = 64;
+int MAX_MEM_PER_PROC = 4096;
 
 struct MemoryBlock
 {
@@ -946,11 +947,17 @@ void readConfigFile(const std::string &filename)
             file >> MEM_FRAME_SIZE;
             std::cout << " - mem-per-frame: " << MEM_FRAME_SIZE << "\n";
         }
-        else if (param == "mem-per-proc")
+        else if (param == "min-mem-per-proc")
         {
-            file >> MEM_PER_PROC;
-            std::cout << " - mem-per-proc: " << MEM_PER_PROC << "\n";
+            file >> MIN_MEM_PER_PROC;
+            std::cout << " - min-mem-per-proc: " << MIN_MEM_PER_PROC << "\n";
         }
+        else if (param == "max-mem-per-proc")
+        {
+            file >> MAX_MEM_PER_PROC;
+            std::cout << " - max-mem-per-proc: " << MAX_MEM_PER_PROC << "\n";
+        }
+
         else
         {
             std::string junk;
@@ -1038,6 +1045,11 @@ std::vector<Instruction> generateRandomInstructions(int count, const std::string
     return instructions;
 }
 
+bool isPowerOfTwo(int x)
+{
+    return (x >= 64 && x <= 8192) && (x & (x - 1)) == 0;
+}
+
 int main()
 {
     bool isInitialized = false;
@@ -1096,7 +1108,15 @@ int main()
                                             getRand(minInstructions, maxInstructions), exec.name);
                         exec.totalLines    = exec.instructions.size();
                         exec.createdDate   = getCurrentDateTime();
-                        int allocStart = allocateMemory(exec.name, MEM_PER_PROC);
+                        
+                        int memSize;
+                        do {
+                            memSize = getRand(MIN_MEM_PER_PROC, MAX_MEM_PER_PROC);
+                        } while (!isPowerOfTwo(memSize));
+
+                        int allocStart = allocateMemory(exec.name, memSize);
+                        exec.memorySize = memSize;
+
                         if (allocStart == -1) {
                             // std::cout << "No memory for " << exec.name << ", requeueing.\n";
                             std::this_thread::sleep_for(std::chrono::milliseconds(batchFreq * delayPerExec));
