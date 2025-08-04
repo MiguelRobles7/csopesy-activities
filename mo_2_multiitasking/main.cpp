@@ -70,6 +70,7 @@ struct FrameTableEntry
 };
 
 std::vector<FrameTableEntry> frameTable;
+std::queue<int> fifoFrameQueue; // tracks frame usage order for FIFO replacement
 
 bool isValidMemoryAccess(const std::string &procName, const std::string &hexAddress)
 {
@@ -288,6 +289,98 @@ std::queue<ExecutableScreen *> readyQueue;
 std::mutex queueMutex;
 std::condition_variable cv;
 bool stopScheduler = false;
+
+int findFreeFrame()
+{
+    for (int i = 0; i < (int)frameTable.size(); ++i)
+    {
+        if (!frameTable[i].occupied)
+            return i;
+    }
+    return -1;
+}
+
+int evictPageAndReturnFrame()
+{
+    if (fifoFrameQueue.empty())
+        return -1; // no pages to evict
+
+    int victimFrame = fifoFrameQueue.front();
+    fifoFrameQueue.pop();
+
+    FrameTableEntry &victim = frameTable[victimFrame];
+    std::string procName = victim.ownerProcess;
+    int virtualPage = victim.virtualPageNumber;
+
+    // Write to backing store (simulate swap out)
+    std::ofstream backingFile("csopesy-backing-store.txt", std::ios::app);
+    backingFile << procName << " " << virtualPage << " " << victimFrame << "\n";
+
+    // Update victim process page table
+    std::queue<ExecutableScreen *> tempQueue;
+
+    while (!readyQueue.empty())
+    {
+        ExecutableScreen *s = readyQueue.front();
+        readyQueue.pop();
+
+        if (s->name == procName)
+        {
+            s->pageTable[virtualPage].present = false;
+            s->pageTable[virtualPage].frameNumber = -1;
+        }
+
+        tempQueue.push(s); // requeue
+    }
+
+    // Restore original queue
+    readyQueue = tempQueue;
+
+    // Mark frame as free
+    victim.occupied = false;
+    victim.ownerProcess = "";
+    victim.virtualPageNumber = -1;
+
+    return victimFrame;
+}
+
+void loadPageIntoFrame(ExecutableScreen &proc, int virtualPage)
+{
+    int frame = findFreeFrame();
+    if (frame == -1)
+    {
+        frame = evictPageAndReturnFrame();
+        if (frame == -1)
+        {
+            std::cout << "ERROR: No frame available for loading page.\n";
+            return;
+        }
+    }
+
+    // Load the page into frame
+    frameTable[frame].occupied = true;
+    frameTable[frame].ownerProcess = proc.name;
+    frameTable[frame].virtualPageNumber = virtualPage;
+
+    fifoFrameQueue.push(frame);
+
+    // Update page table
+    proc.pageTable[virtualPage].present = true;
+    proc.pageTable[virtualPage].frameNumber = frame;
+}
+
+bool ensurePageLoaded(ExecutableScreen &proc, int memoryAddress)
+{
+    int virtualPage = memoryAddress / MEM_FRAME_SIZE;
+
+    if (!proc.pageTable[virtualPage].present)
+    {
+        // Page fault: load it in
+        loadPageIntoFrame(proc, virtualPage);
+        return true; // page was loaded
+    }
+    return false; // already present
+}
 
 void cpuWorker(int coreId)
 {
