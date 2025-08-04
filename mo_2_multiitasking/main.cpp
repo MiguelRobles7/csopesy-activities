@@ -1339,10 +1339,14 @@ int main()
                     {
                         currentScreen = s;
                         clearScreen();
-                        printScreen(s);
+                        
                         if (s.isShutdown)
                         {
                             std::cout << s.shutdownMessage << "\n";
+                        }
+                        else 
+                        {
+                            printScreen(s);
                         }
                         found = true;
                         break;
