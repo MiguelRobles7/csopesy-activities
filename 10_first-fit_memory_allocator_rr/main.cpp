@@ -899,7 +899,7 @@ int main()
                 }
                 if (!found)
                 {
-                    std::cout << "Screen not found.\n";
+                    std::cout << "Process " + command[2] + " not found.\n";
                 }
             }
             else if (command[1] == "-ls" && command.size() == 2)
@@ -963,24 +963,31 @@ int main()
                 int memSize = std::stoi(command[3]);
 
                 // Memory validation
-                if (memSize < 64 || (memSize & (memSize - 1)) != 0 || memSize < 26 || memSize > 216) {
+                if (memSize < 64 || memSize > 8192 || (memSize & (memSize - 1)) != 0) {
                     std::cout << "Invalid memory allocation.\n";
                     return 0;
                 }
 
                 // Reconstruct instruction string (everything after the 4th token)
-                size_t quotePos = cmd.find("\"");
+                size_t firstQuote = cmd.find("\"");
+                size_t lastQuote = cmd.rfind("\"");
                 std::string rawInstructions;
-                if (quotePos != std::string::npos) {
-                    rawInstructions = cmd.substr(quotePos + 1);
-                    size_t endQuote = rawInstructions.rfind("\"");
-                    if (endQuote != std::string::npos) {
-                        rawInstructions = rawInstructions.substr(0, endQuote);
-                    }
+                if (firstQuote != std::string::npos && lastQuote != std::string::npos && lastQuote > firstQuote) {
+                    rawInstructions = cmd.substr(firstQuote + 1, lastQuote - firstQuote - 1);
+                } else {
+                    std::cout << "Invalid instruction format.\n";
+                    continue;
                 }
+
 
                 ExecutableScreen proc = createScreen(procName);
                 proc.instructions = parseInstructionString(rawInstructions, procName);
+
+                if (proc.instructions.size() < 1 || proc.instructions.size() > 50) {
+                    std::cout << "Number of instructions should be between 1-50\n";
+                    continue;
+                }
+
                 proc.totalLines = static_cast<int>(proc.instructions.size());
 
                 int allocStart = allocateMemory(procName);
