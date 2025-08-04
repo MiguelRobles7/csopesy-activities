@@ -52,7 +52,6 @@ std::atomic<int> idleTicks{0};
 std::atomic<int> pagesPagedIn{0};
 std::atomic<int> pagesPagedOut{0};
 
-
 std::deque<std::thread> cpuThreads;
 int MEM_TOTAL = 16384;
 int MEM_FRAME_SIZE = 16;
@@ -322,6 +321,8 @@ int evictPageAndReturnFrame()
     std::ofstream backingFile("csopesy-backing-store.txt", std::ios::app);
     backingFile << procName << " " << virtualPage << " " << victimFrame << "\n";
 
+    pagesPagedOut++;
+
     // Update victim process page table
     std::queue<ExecutableScreen *> tempQueue;
 
@@ -373,6 +374,8 @@ void loadPageIntoFrame(ExecutableScreen &proc, int virtualPage)
     // Update page table
     proc.pageTable[virtualPage].present = true;
     proc.pageTable[virtualPage].frameNumber = frame;
+
+    pagesPagedIn++;
 }
 
 bool ensurePageLoaded(ExecutableScreen &proc, int memoryAddress)
@@ -394,15 +397,14 @@ void cpuWorker(int coreId)
     {
         // Wait for a process to schedule
         std::unique_lock<std::mutex> lock(queueMutex);
-        cv.wait(lock, []{
-            return !readyQueue.empty() || stopScheduler;
-        });
-        if (readyQueue.empty()) {
+        cv.wait(lock, []
+                { return !readyQueue.empty() || stopScheduler; });
+        if (readyQueue.empty())
+        {
             idleTicks++;
             totalTicks++;
             continue;
         }
-            
 
         // Pop the next process
         ExecutableScreen *execScreen = readyQueue.front();
@@ -1200,11 +1202,13 @@ int main()
                 }
             }
         }
-        else if (command[0] == "vmstat") {
+        else if (command[0] == "vmstat")
+        {
             std::lock_guard<std::mutex> lock(memMutex);
             int usedMem = 0;
-            for (const auto& block : memoryBlocks)
-                if (!block.owner.empty()) usedMem += block.size;
+            for (const auto &block : memoryBlocks)
+                if (!block.owner.empty())
+                    usedMem += block.size;
 
             int freeMem = MEM_TOTAL - usedMem;
 
