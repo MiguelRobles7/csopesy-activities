@@ -159,7 +159,6 @@ int allocateMemory(const std::string &procName, int memSize)
     return -1; // no fit found
 }
 
-
 void freeMemory(const std::string &procName)
 {
     std::lock_guard<std::mutex> lock(memMutex);
@@ -281,13 +280,14 @@ void printScreen(const ExecutableScreen &screen)
     {
         std::cout << "  " << kv.first << " = " << kv.second << "\n";
     }
-    if (!screen.consoleOutput.empty()) {
-    std::cout << "Console Output:\n";
-    for (const auto& line : screen.consoleOutput) {
-        std::cout << "  " << line << "\n";
+    if (!screen.consoleOutput.empty())
+    {
+        std::cout << "Console Output:\n";
+        for (const auto &line : screen.consoleOutput)
+        {
+            std::cout << "  " << line << "\n";
+        }
     }
-}
-
 }
 
 void printHeader()
@@ -325,6 +325,38 @@ int findFreeFrame()
     return -1;
 }
 
+bool restorePageFromBackingStore(const std::string &procName, int virtualPage, int frameNum)
+{
+    std::ifstream in("csopesy-backing-store.txt");
+    if (!in.is_open())
+        return false;
+
+    std::string line;
+    while (std::getline(in, line))
+    {
+        std::istringstream iss(line);
+        std::string name;
+        int page;
+        iss >> name >> page;
+
+        if (name == procName && page == virtualPage)
+        {
+            int baseAddr = frameNum * MEM_FRAME_SIZE;
+            for (int i = 0; i < MEM_FRAME_SIZE; ++i)
+            {
+                uint16_t val;
+                if (!(iss >> val))
+                    break;
+                std::string addr = "0x" + std::to_string(baseAddr + i);
+                std::lock_guard<std::mutex> lock(physicalMemoryMutex);
+                physicalMemory[addr] = val;
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
 int evictPageAndReturnFrame()
 {
     if (fifoFrameQueue.empty())
@@ -339,7 +371,22 @@ int evictPageAndReturnFrame()
 
     // Write to backing store (simulate swap out)
     std::ofstream backingFile("csopesy-backing-store.txt", std::ios::app);
-    backingFile << procName << " " << virtualPage << " " << victimFrame << "\n";
+    backingFile << procName << " " << virtualPage << " ";
+    int baseAddr = victimFrame * MEM_FRAME_SIZE;
+    for (int i = 0; i < MEM_FRAME_SIZE; ++i)
+    {
+        std::string addr = "0x" + std::to_string(baseAddr + i);
+        uint16_t val = 0;
+        {
+            std::lock_guard<std::mutex> lock(physicalMemoryMutex);
+            if (physicalMemory.count(addr))
+            {
+                val = physicalMemory[addr];
+            }
+        }
+        backingFile << val << " ";
+    }
+    backingFile << "\n";
 
     pagesPagedOut++;
 
@@ -388,6 +435,7 @@ void loadPageIntoFrame(ExecutableScreen &proc, int virtualPage)
     frameTable[frame].occupied = true;
     frameTable[frame].ownerProcess = proc.name;
     frameTable[frame].virtualPageNumber = virtualPage;
+    restorePageFromBackingStore(proc.name, virtualPage, frame);
 
     fifoFrameQueue.push(frame);
 
@@ -1144,7 +1192,7 @@ int main()
                 schedulerRunning = true;
 
                 schedulerGeneratorThread = std::thread([&screens]()
-                {
+                                                       {
                     int nextPid = 1;
                     while (schedulerRunning) {
                         ExecutableScreen exec{};
@@ -1289,7 +1337,8 @@ int main()
             std::lock_guard<std::mutex> lock(memMutex);
             int usedMem = 0;
             int freeMem = 0;
-            for (const auto &block : memoryBlocks) {
+            for (const auto &block : memoryBlocks)
+            {
                 if (block.owner.empty())
                     freeMem += block.size;
                 else
@@ -1314,31 +1363,32 @@ int main()
         }
         else if (command[0] == "screen" && currentScreen.name == "Main Menu")
         {
-           /* if (command[1] == "-s" && command.size() == 3)
-            {
-                ExecutableScreen proc = createScreen(command[2]);
+            /* if (command[1] == "-s" && command.size() == 3)
+             {
+                 ExecutableScreen proc = createScreen(command[2]);
 
-                proc.instructions = generateRandomInstructions(
-                    getRand(minInstructions, maxInstructions));
+                 proc.instructions = generateRandomInstructions(
+                     getRand(minInstructions, maxInstructions));
 
-                proc.totalLines = static_cast<int>(proc.instructions.size());
-                {
-                    std::lock_guard<std::mutex> lg(screensMutex);
-                    screens.push_back(std::move(proc));
-                    // **Immediately** enqueue the new process:
-                    ExecutableScreen *p = &screens.back();
-                    {
-                        std::lock_guard<std::mutex> ql(queueMutex);
-                        readyQueue.push(p);
-                    }
-                    cv.notify_one();
-                }
+                 proc.totalLines = static_cast<int>(proc.instructions.size());
+                 {
+                     std::lock_guard<std::mutex> lg(screensMutex);
+                     screens.push_back(std::move(proc));
+                     // **Immediately** enqueue the new process:
+                     ExecutableScreen *p = &screens.back();
+                     {
+                         std::lock_guard<std::mutex> ql(queueMutex);
+                         readyQueue.push(p);
+                     }
+                     cv.notify_one();
+                 }
 
-                currentScreen = proc;
-                clearScreen();
-                printScreen(proc);
-            }
-            else */if (command[1] == "-s" && command.size() == 4)
+                 currentScreen = proc;
+                 clearScreen();
+                 printScreen(proc);
+             }
+             else */
+            if (command[1] == "-s" && command.size() == 4)
             {
                 std::string procName = command[2];
                 int memSize = std::stoi(command[3]);
@@ -1386,12 +1436,12 @@ int main()
                     {
                         currentScreen = s;
                         clearScreen();
-                        
+
                         if (s.isShutdown)
                         {
                             std::cout << s.shutdownMessage << "\n";
                         }
-                        else 
+                        else
                         {
                             printScreen(s);
                         }
