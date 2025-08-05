@@ -1317,36 +1317,37 @@ int main()
             }
             else
             {
-                // Find the live process in your master list
-                auto it = std::find_if(
-                    screens.begin(), screens.end(),
-                    [&](const ExecutableScreen &s)
-                    { return s.name == currentScreen.name; });
-                if (it != screens.end())
+                std::lock_guard<std::mutex> lock(screensMutex);
+                std::cout << "\n===== PROCESS SMI =====\n";
+                std::cout << std::left
+                          << std::setw(12) << "Process"
+                          << std::setw(10) << "MemUsed"
+                          << std::setw(10) << "CPU"
+                          << std::setw(12) << "Status"
+                          << "Last Log\n";
+                std::cout << std::string(60, '-') << "\n";
+
+                for (const auto &proc : screens)
                 {
-                    auto &proc = *it;
-                    std::cout << "Process: " << proc.name;
-                    if (proc.currentLine < proc.totalLines)
+                    std::string status = "Running";
+                    if (proc.isShutdown)
                     {
-                        std::cout << " (Running)\n";
-                        std::cout << "  Executed " << proc.currentLine << " / " << proc.totalLines << " instructions\n";
+                        status = "Shutdown";
                     }
-                    else
+                    else if (proc.currentLine >= proc.totalLines)
                     {
-                        std::cout << " (Finished)\n";
+                        status = "Finished";
                     }
-                    std::cout << "  Last Log Time: " << proc.lastLogTime << "\n";
-                    std::cout << "  CPU Core: " << proc.cpuId << "\n";
-                    std::cout << "  Variables:\n";
-                    for (auto &kv : proc.memory.vars)
-                    {
-                        std::cout << "    " << kv.first << " = " << kv.second << "\n";
-                    }
+
+                    std::cout << std::left
+                              << std::setw(12) << proc.name
+                              << std::setw(10) << proc.memorySize
+                              << std::setw(10) << proc.cpuId
+                              << std::setw(12) << status
+                              << proc.lastLogTime << "\n";
                 }
-                else
-                {
-                    std::cout << "Process " << currentScreen.name << " not found.\n";
-                }
+
+                std::cout << std::string(60, '=') << "\n";
             }
         }
         else if (command[0] == "vmstat")
