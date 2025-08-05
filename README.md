@@ -2,7 +2,7 @@
 
 This project is a **Command-Line Operating System Simulator** built with C++. It simulates basic terminal behavior including session management through "screens", rudimentary command parsing, and screen navigation. It provides a foundation for extending into more complex OS or shell behavior simulations.
 
-Made by: ROBLES, Miguel [S20] | IMPERIAL, Izabella | VICTORIA, Alfred [S20]
+Made by: ROBLES, Miguel [S20] | IMPERIAL, Izabella [S19] | VICTORIA, Alfred [S20]
 
 ---
 
@@ -28,13 +28,13 @@ Made by: ROBLES, Miguel [S20] | IMPERIAL, Izabella | VICTORIA, Alfred [S20]
 ### On Linux/macOS/WSL:
 
 ```bash
-g++ -std=c++17 -o os_simulator main.cpp
+clang++ -fcolor-diagnostics -fansi-escape-codes -g -std=c++17 -stdlib=libc++ -lncurses main.cpp -o os_simulator
 ```
 
 ### On Windows (MinGW):
 
 ```bash
-g++ -std=c++17 -o os_simulator.exe main.cpp
+g++ -std=c++17 -o os_simulator.exe main.cpp -lncurses
 ```
 
 ---

@@ -200,7 +200,7 @@ struct Screen
     std::string lastLogTime;
     std::string finishedTime;
 
-    virtual ~Screen() = default; // <— make it polymorphic
+    virtual ~Screen() = default;
 };
 
 enum class InstructionType
@@ -251,7 +251,7 @@ struct ExecutableScreen : public Screen
     std::unordered_map<int, PageTableEntry> pageTable; // key = virtual page number
 };
 
-ExecutableScreen* activePerCore[128] = {nullptr}; // max 128 cores supported
+ExecutableScreen *activePerCore[128] = {nullptr}; // max 128 cores supported
 
 ExecutableScreen createScreen(std::string name)
 {
@@ -484,7 +484,8 @@ void cpuWorker(int coreId)
     while (true)
     {
         std::unique_lock<std::mutex> lock(queueMutex);
-        cv.wait(lock, [] { return !readyQueue.empty() || stopScheduler; });
+        cv.wait(lock, []
+                { return !readyQueue.empty() || stopScheduler; });
 
         if (stopScheduler && readyQueue.empty())
             return;
@@ -500,7 +501,8 @@ void cpuWorker(int coreId)
         readyQueue.pop();
         lock.unlock();
 
-        if (!execScreen) continue;
+        if (!execScreen)
+            continue;
         activePerCore[coreId] = execScreen;
 
         if (schedulerAlgo == "rr")
@@ -587,8 +589,15 @@ void cpuWorker(int coreId)
                     std::string valRef = inst.var2;
 
                     int addr = 0;
-                    try { addr = std::stoi(address, nullptr, 16); }
-                    catch (...) { shutdownProcess(*execScreen, address); goto next_process; }
+                    try
+                    {
+                        addr = std::stoi(address, nullptr, 16);
+                    }
+                    catch (...)
+                    {
+                        shutdownProcess(*execScreen, address);
+                        goto next_process;
+                    }
 
                     if (addr < 0 || addr >= MEM_TOTAL)
                     {
@@ -602,8 +611,15 @@ void cpuWorker(int coreId)
                         val = execScreen->memory.vars[valRef];
                     else
                     {
-                        try { val = static_cast<uint16_t>(std::stoi(valRef)); }
-                        catch (...) { logEntry = "WRITE failed: value not found."; break; }
+                        try
+                        {
+                            val = static_cast<uint16_t>(std::stoi(valRef));
+                        }
+                        catch (...)
+                        {
+                            logEntry = "WRITE failed: value not found.";
+                            break;
+                        }
                     }
 
                     {
@@ -620,8 +636,15 @@ void cpuWorker(int coreId)
                     std::string address = inst.var2;
 
                     int addr = 0;
-                    try { addr = std::stoi(address, nullptr, 16); }
-                    catch (...) { shutdownProcess(*execScreen, address); goto next_process; }
+                    try
+                    {
+                        addr = std::stoi(address, nullptr, 16);
+                    }
+                    catch (...)
+                    {
+                        shutdownProcess(*execScreen, address);
+                        goto next_process;
+                    }
 
                     if (addr < 0 || addr >= MEM_TOTAL)
                     {
@@ -667,12 +690,14 @@ void cpuWorker(int coreId)
 
                     int inMemCount = 0;
                     for (const auto &b : memoryBlocks)
-                        if (!b.owner.empty()) inMemCount++;
+                        if (!b.owner.empty())
+                            inMemCount++;
                     snap << "Number of processes in memory: " << inMemCount << "\n";
 
                     int externalFrag = 0;
                     for (const auto &b : memoryBlocks)
-                        if (b.owner.empty()) externalFrag += b.size;
+                        if (b.owner.empty())
+                            externalFrag += b.size;
                     snap << "Total external fragmentation in KB: " << externalFrag / 1024 << "\n\n";
 
                     snap << "----end---- = " << MEM_TOTAL << "\n";
@@ -681,7 +706,9 @@ void cpuWorker(int coreId)
                     {
                         if (!it->owner.empty())
                         {
-                            snap << cur << "\n" << it->owner << "\n" << (cur - it->size) << "\n";
+                            snap << cur << "\n"
+                                 << it->owner << "\n"
+                                 << (cur - it->size) << "\n";
                         }
                         cur -= it->size;
                     }
@@ -717,7 +744,6 @@ void cpuWorker(int coreId)
         }
     }
 }
-
 
 void schedulerThreadFunc(std::deque<ExecutableScreen> &screens)
 {
@@ -1059,8 +1085,6 @@ bool isPowerOfTwo(int x)
 int main()
 {
     bool isInitialized = false;
-    // TODO: Read config file and store said parameters. Replace any that can be used from FCFS implementation.
-    // Said parameters are crucial and relevant to scheduling.
     printHeader();
     std::string cmd;
     std::deque<ExecutableScreen> screens;
@@ -1091,20 +1115,18 @@ int main()
             std::cout << "Please run the 'initialize' command first.\n";
             continue;
         }
-        // Command processing
-        // TODO: "scheduler-start" and "scheduler-stop"
         if (command.empty())
         {
             continue;
         }
-        // TODO: improve ux
         else if (command[0] == "scheduler-start" && currentScreen.name == "Main Menu")
         {
             if (!schedulerRunning)
             {
                 schedulerRunning = true;
 
-                schedulerGeneratorThread = std::thread([&screens]() {
+                schedulerGeneratorThread = std::thread([&screens]()
+                                                       {
                     int nextPid = 1;
                     while (schedulerRunning)
                     {
@@ -1141,8 +1163,7 @@ int main()
                         }
 
                         std::this_thread::sleep_for(std::chrono::milliseconds(batchFreq * delayPerExec));
-                    }
-                });
+                    } });
 
                 schedulerGeneratorThread.detach();
                 if (!isPrinting)
@@ -1201,7 +1222,7 @@ int main()
             }
             else
             {
-                // 🔧 Gracefully shutdown all threads
+                // Gracefully shutdown all threads
                 schedulerRunning = false;
                 stopScheduler = true;
                 cv.notify_all();
@@ -1246,11 +1267,11 @@ int main()
 
                 // Header
                 std::cout << std::left
-                        << std::setw(14) << "Process"
-                        << std::setw(10) << "MemUsed"
-                        << std::setw(10) << "CPU"
-                        << std::setw(12) << "Status"
-                        << "Last Log\n";
+                          << std::setw(14) << "Process"
+                          << std::setw(10) << "MemUsed"
+                          << std::setw(10) << "CPU"
+                          << std::setw(12) << "Status"
+                          << "Last Log\n";
                 std::cout << std::string(60, '-') << "\n";
 
                 std::lock_guard<std::mutex> lock(screensMutex);
@@ -1271,11 +1292,11 @@ int main()
                     }
 
                     std::cout << std::left
-                            << std::setw(14) << proc.name
-                            << std::setw(10) << proc.memorySize
-                            << std::setw(10) << proc.cpuId
-                            << std::setw(12) << status
-                            << proc.lastLogTime << "\n";
+                              << std::setw(14) << proc.name
+                              << std::setw(10) << proc.memorySize
+                              << std::setw(10) << proc.cpuId
+                              << std::setw(12) << status
+                              << proc.lastLogTime << "\n";
                 }
 
                 std::cout << std::string(60, '=') << "\n\n";
@@ -1346,31 +1367,6 @@ int main()
         }
         else if (command[0] == "screen" && currentScreen.name == "Main Menu")
         {
-            /* if (command[1] == "-s" && command.size() == 3)
-             {
-                 ExecutableScreen proc = createScreen(command[2]);
-
-                 proc.instructions = generateRandomInstructions(
-                     getRand(minInstructions, maxInstructions));
-
-                 proc.totalLines = static_cast<int>(proc.instructions.size());
-                 {
-                     std::lock_guard<std::mutex> lg(screensMutex);
-                     screens.push_back(std::move(proc));
-                     // **Immediately** enqueue the new process:
-                     ExecutableScreen *p = &screens.back();
-                     {
-                         std::lock_guard<std::mutex> ql(queueMutex);
-                         readyQueue.push(p);
-                     }
-                     cv.notify_one();
-                 }
-
-                 currentScreen = proc;
-                 clearScreen();
-                 printScreen(proc);
-             }
-             else */
             if (command[1] == "-s" && command.size() == 4)
             {
                 std::string procName = command[2];
@@ -1454,26 +1450,26 @@ int main()
                 float utilization = (static_cast<float>(activeCores) / totalCores) * 100.0f;
 
                 // Clamp utilization to 100%
-                if (utilization > 100.0f) utilization = 100.0f;
+                if (utilization > 100.0f)
+                    utilization = 100.0f;
 
                 // Write CPU stats
                 report_stream << "CPU Utilization: " << std::fixed << std::setprecision(2) << utilization << "%\n";
                 report_stream << "Cores Used: " << activeCores << "\n";
                 report_stream << "Cores Available: " << availableCores << "\n\n";
-                
 
                 // Generate Report
                 report_stream << "------------------------------\nRunning processes:\n";
                 for (int i = 0; i < CPU_CORES; ++i)
                 {
-                    ExecutableScreen* proc = activePerCore[i];
+                    ExecutableScreen *proc = activePerCore[i];
                     if (proc != nullptr)
                     {
                         report_stream << proc->name << "  "
-                                    << proc->lastLogTime << "    "
-                                    << "Core " << i << "    "
-                                    << proc->currentLine << " / "
-                                    << proc->totalLines << "\n";
+                                      << proc->lastLogTime << "    "
+                                      << "Core " << i << "    "
+                                      << proc->currentLine << " / "
+                                      << proc->totalLines << "\n";
                     }
                 }
 
@@ -1483,10 +1479,10 @@ int main()
                     if (screens[i].currentLine == screens[i].totalLines)
                     {
                         report_stream << "process" << i << "  "
-                                    << (screens[i].finishedTime.empty() ? "Getting finishing time..." : screens[i].finishedTime) << "    "
-                                    << "Finished    "
-                                    << screens[i].currentLine << " / "
-                                    << screens[i].totalLines << "\n";
+                                      << (screens[i].finishedTime.empty() ? "Getting finishing time..." : screens[i].finishedTime) << "    "
+                                      << "Finished    "
+                                      << screens[i].currentLine << " / "
+                                      << screens[i].totalLines << "\n";
                     }
                 }
                 report_stream << "------------------------------\n";
@@ -1578,10 +1574,8 @@ int main()
             {
                 std::string pname = "p" + std::to_string(i + 1);
                 ExecutableScreen proc = createScreen(pname);
-                // ← assign real instructions here:
                 proc.instructions = generateRandomInstructions(
                     getRand(minInstructions, maxInstructions), pname);
-                // optional: make totalLines match actual instruction count
                 proc.totalLines = static_cast<int>(proc.instructions.size());
                 {
                     std::lock_guard<std::mutex> lg(screensMutex);
@@ -1610,7 +1604,7 @@ int main()
                 stopScheduler = false; // reset in case of re-run
                 printThread = std::thread(startPrintJob, std::ref(screens));
                 printThread.detach(); // run in background
-                // std::cout << "⏳ Print job started in background.\n";
+                // std::cout << "Print job started in background.\n";
             }
         }
         else if ((command[0] == "initialize"))
@@ -1631,7 +1625,7 @@ int main()
             std::thread testThread([&screens]()
                                    {
                 int nextPid = 1;
-                int count = 5;  // You can change or read this from a config/command if needed
+                int count = 5; 
                 for (int i = 0; i < count; ++i)
                 {
                     ExecutableScreen exec{};
