@@ -10,6 +10,7 @@
 #include <sstream>
 #include <fstream>
 #include <thread>
+#include <unordered_set>
 #include <mutex>
 #include <queue>
 #include <filesystem>
@@ -1429,16 +1430,21 @@ int main()
             else if (command[1] == "-ls" && command.size() == 2)
             {
                 // Count active/running processes
-                int activeCores = 0;
+                std::unordered_set<int> usedCores;
                 for (const auto &s : screens)
                 {
                     if (s.currentLine > 0 && s.currentLine < s.totalLines)
-                        activeCores++;
+                    {
+                        usedCores.insert(s.cpuId); // actual running cores
+                    }
                 }
-
+                int activeCores = static_cast<int>(usedCores.size());
                 int totalCores = CPU_CORES;
                 int availableCores = totalCores - activeCores;
                 float utilization = (static_cast<float>(activeCores) / totalCores) * 100.0f;
+
+                // Clamp utilization to 100%
+                if (utilization > 100.0f) utilization = 100.0f;
 
                 // Write CPU stats
                 report_stream << "CPU Utilization: " << std::fixed << std::setprecision(2) << utilization << "%\n";
@@ -1452,10 +1458,10 @@ int main()
                     if (screens[i].currentLine > 0 && screens[i].currentLine < screens[i].totalLines)
                     {
                         report_stream << "process" << i << "  "
-                                      << screens[i].lastLogTime << "    "
-                                      << "Core " << screens[i].cpuId << "    "
-                                      << screens[i].currentLine << " / "
-                                      << screens[i].totalLines << "\n";
+                                    << screens[i].lastLogTime << "    "
+                                    << "Core " << screens[i].cpuId << "    "
+                                    << screens[i].currentLine << " / "
+                                    << screens[i].totalLines << "\n";
                     }
                 }
 
@@ -1465,10 +1471,10 @@ int main()
                     if (screens[i].currentLine == screens[i].totalLines)
                     {
                         report_stream << "process" << i << "  "
-                                      << (screens[i].finishedTime.empty() ? "Getting finishing time..." : screens[i].finishedTime) << "    "
-                                      << "Finished    "
-                                      << screens[i].currentLine << " / "
-                                      << screens[i].totalLines << "\n";
+                                    << (screens[i].finishedTime.empty() ? "Getting finishing time..." : screens[i].finishedTime) << "    "
+                                    << "Finished    "
+                                    << screens[i].currentLine << " / "
+                                    << screens[i].totalLines << "\n";
                     }
                 }
                 report_stream << "------------------------------\n";
@@ -1479,7 +1485,8 @@ int main()
                 // Print report
                 std::cout << report_util;
 
-                report_stream.clear();
+                report_stream.str("");
+                report_stream.clear(); // properly clear the stream
             }
             else if (command[1] == "-c" && command.size() >= 4)
             {
