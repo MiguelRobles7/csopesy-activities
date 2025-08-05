@@ -251,6 +251,8 @@ struct ExecutableScreen : public Screen
     std::unordered_map<int, PageTableEntry> pageTable; // key = virtual page number
 };
 
+ExecutableScreen* activePerCore[128] = {nullptr}; // max 128 cores supported
+
 ExecutableScreen createScreen(std::string name)
 {
     ExecutableScreen newScreen;
@@ -499,6 +501,7 @@ void cpuWorker(int coreId)
         lock.unlock();
 
         if (!execScreen) continue;
+        activePerCore[coreId] = execScreen;
 
         if (schedulerAlgo == "rr")
         {
@@ -1450,18 +1453,20 @@ int main()
                 report_stream << "CPU Utilization: " << std::fixed << std::setprecision(2) << utilization << "%\n";
                 report_stream << "Cores Used: " << activeCores << "\n";
                 report_stream << "Cores Available: " << availableCores << "\n\n";
+                
 
                 // Generate Report
                 report_stream << "------------------------------\nRunning processes:\n";
-                for (size_t i = 0; i < screens.size(); ++i)
+                for (int i = 0; i < CPU_CORES; ++i)
                 {
-                    if (screens[i].currentLine > 0 && screens[i].currentLine < screens[i].totalLines)
+                    ExecutableScreen* proc = activePerCore[i];
+                    if (proc != nullptr)
                     {
-                        report_stream << "process" << i << "  "
-                                    << screens[i].lastLogTime << "    "
-                                    << "Core " << screens[i].cpuId << "    "
-                                    << screens[i].currentLine << " / "
-                                    << screens[i].totalLines << "\n";
+                        report_stream << proc->name << "  "
+                                    << proc->lastLogTime << "    "
+                                    << "Core " << i << "    "
+                                    << proc->currentLine << " / "
+                                    << proc->totalLines << "\n";
                     }
                 }
 
