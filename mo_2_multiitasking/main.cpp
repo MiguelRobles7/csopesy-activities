@@ -468,19 +468,7 @@ void loadPageIntoFrame(ExecutableScreen &proc, int virtualPage)
 
 bool ensurePageLoaded(ExecutableScreen &proc, int memoryAddress)
 {
-    if (memoryAddress < 0 || memoryAddress >= proc.memorySize)
-    {
-        shutdownProcess(proc, "Memory access violation");
-        return false;
-    }
-
     int virtualPage = memoryAddress / MEM_FRAME_SIZE;
-
-    if (virtualPage < 0 || virtualPage >= proc.pageTable.size())
-    {
-        shutdownProcess(proc, "Virtual page access violation");
-        return false;
-    }
 
     if (!proc.pageTable[virtualPage].present)
     {
@@ -520,7 +508,9 @@ void cpuWorker(int coreId)
             int slice = quantum;
             while (slice > 0 && execScreen->instructionPointer < (int)execScreen->instructions.size())
             {
+                std::lock_guard<std::mutex> lock(screensMutex);
                 Instruction &inst = execScreen->instructions[execScreen->instructionPointer];
+
                 std::string logEntry;
 
                 switch (inst.type)
@@ -1143,11 +1133,13 @@ int main()
                             screens.push_back(std::move(exec));
                             ExecutableScreen *p = &screens.back();
 
-                            std::lock_guard<std::mutex> ql(queueMutex);
-                            readyQueue.push(p);
+                            {
+                                std::lock_guard<std::mutex> ql(queueMutex);
+                                readyQueue.push(p);
+                            }
+                            cv.notify_one();                        
                         }
 
-                        cv.notify_one();
                         std::this_thread::sleep_for(std::chrono::milliseconds(batchFreq * delayPerExec));
                     }
                 });
