@@ -10,6 +10,7 @@
 #include <sstream>
 #include <fstream>
 #include <thread>
+#include <unordered_set>
 #include <mutex>
 #include <queue>
 #include <filesystem>
@@ -1205,6 +1206,22 @@ int main()
             }
             else
             {
+                // 🔧 Gracefully shutdown all threads
+                schedulerRunning = false;
+                stopScheduler = true;
+                cv.notify_all();
+
+                if (schedulerGeneratorThread.joinable())
+                    schedulerGeneratorThread.join();
+
+                for (auto &t : cpuThreads)
+                {
+                    if (t.joinable())
+                        t.join();
+                }
+
+                cpuThreads.clear();
+
                 break;
             }
         }
@@ -1212,7 +1229,61 @@ int main()
         {
             if (currentScreen.name == "Main Menu")
             {
-                std::cout << "Cannot do this in the main menu";
+                std::cout << "\n===== PROCESS SMI =====\n";
+
+                // Memory overview
+                int usedMem = 0;
+                int freeMem = 0;
+                {
+                    std::lock_guard<std::mutex> lock(memMutex);
+                    for (const auto &block : memoryBlocks)
+                    {
+                        if (block.owner.empty())
+                            freeMem += block.size;
+                        else
+                            usedMem += block.size;
+                    }
+                }
+
+                std::cout << "Memory Used    : " << usedMem << " bytes\n";
+                std::cout << "Memory Free    : " << freeMem << " bytes\n";
+                std::cout << "Total Memory   : " << MEM_TOTAL << " bytes\n\n";
+
+                // Header
+                std::cout << std::left
+                        << std::setw(14) << "Process"
+                        << std::setw(10) << "MemUsed"
+                        << std::setw(10) << "CPU"
+                        << std::setw(12) << "Status"
+                        << "Last Log\n";
+                std::cout << std::string(60, '-') << "\n";
+
+                std::lock_guard<std::mutex> lock(screensMutex);
+                for (const auto &proc : screens)
+                {
+                    std::string status;
+                    if (proc.isShutdown)
+                    {
+                        status = "Shutdown";
+                    }
+                    else if (proc.currentLine >= proc.totalLines)
+                    {
+                        status = "Finished";
+                    }
+                    else
+                    {
+                        status = "Running";
+                    }
+
+                    std::cout << std::left
+                            << std::setw(14) << proc.name
+                            << std::setw(10) << proc.memorySize
+                            << std::setw(10) << proc.cpuId
+                            << std::setw(12) << status
+                            << proc.lastLogTime << "\n";
+                }
+
+                std::cout << std::string(60, '=') << "\n\n";
             }
             else
             {
@@ -1374,16 +1445,21 @@ int main()
             else if (command[1] == "-ls" && command.size() == 2)
             {
                 // Count active/running processes
-                int activeCores = 0;
+                std::unordered_set<int> usedCores;
                 for (const auto &s : screens)
                 {
                     if (s.currentLine > 0 && s.currentLine < s.totalLines)
-                        activeCores++;
+                    {
+                        usedCores.insert(s.cpuId); // actual running cores
+                    }
                 }
-
+                int activeCores = static_cast<int>(usedCores.size());
                 int totalCores = CPU_CORES;
                 int availableCores = totalCores - activeCores;
                 float utilization = (static_cast<float>(activeCores) / totalCores) * 100.0f;
+
+                // Clamp utilization to 100%
+                if (utilization > 100.0f) utilization = 100.0f;
 
                 // Write CPU stats
                 report_stream << "CPU Utilization: " << std::fixed << std::setprecision(2) << utilization << "%\n";
@@ -1397,10 +1473,10 @@ int main()
                     if (screens[i].currentLine > 0 && screens[i].currentLine < screens[i].totalLines)
                     {
                         report_stream << "process" << i << "  "
-                                      << screens[i].lastLogTime << "    "
-                                      << "Core " << screens[i].cpuId << "    "
-                                      << screens[i].currentLine << " / "
-                                      << screens[i].totalLines << "\n";
+                                    << screens[i].lastLogTime << "    "
+                                    << "Core " << screens[i].cpuId << "    "
+                                    << screens[i].currentLine << " / "
+                                    << screens[i].totalLines << "\n";
                     }
                 }
 
@@ -1410,10 +1486,10 @@ int main()
                     if (screens[i].currentLine == screens[i].totalLines)
                     {
                         report_stream << "process" << i << "  "
-                                      << (screens[i].finishedTime.empty() ? "Getting finishing time..." : screens[i].finishedTime) << "    "
-                                      << "Finished    "
-                                      << screens[i].currentLine << " / "
-                                      << screens[i].totalLines << "\n";
+                                    << (screens[i].finishedTime.empty() ? "Getting finishing time..." : screens[i].finishedTime) << "    "
+                                    << "Finished    "
+                                    << screens[i].currentLine << " / "
+                                    << screens[i].totalLines << "\n";
                     }
                 }
                 report_stream << "------------------------------\n";
@@ -1424,7 +1500,8 @@ int main()
                 // Print report
                 std::cout << report_util;
 
-                report_stream.clear();
+                report_stream.str("");
+                report_stream.clear(); // properly clear the stream
             }
             else if (command[1] == "-c" && command.size() >= 4)
             {
