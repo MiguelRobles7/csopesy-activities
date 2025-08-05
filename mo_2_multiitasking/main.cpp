@@ -1190,6 +1190,22 @@ int main()
             }
             else
             {
+                // 🔧 Gracefully shutdown all threads
+                schedulerRunning = false;
+                stopScheduler = true;
+                cv.notify_all();
+
+                if (schedulerGeneratorThread.joinable())
+                    schedulerGeneratorThread.join();
+
+                for (auto &t : cpuThreads)
+                {
+                    if (t.joinable())
+                        t.join();
+                }
+
+                cpuThreads.clear();
+
                 break;
             }
         }
@@ -1197,7 +1213,61 @@ int main()
         {
             if (currentScreen.name == "Main Menu")
             {
-                std::cout << "Cannot do this in the main menu";
+                std::cout << "\n===== PROCESS SMI =====\n";
+
+                // Memory overview
+                int usedMem = 0;
+                int freeMem = 0;
+                {
+                    std::lock_guard<std::mutex> lock(memMutex);
+                    for (const auto &block : memoryBlocks)
+                    {
+                        if (block.owner.empty())
+                            freeMem += block.size;
+                        else
+                            usedMem += block.size;
+                    }
+                }
+
+                std::cout << "Memory Used    : " << usedMem << " bytes\n";
+                std::cout << "Memory Free    : " << freeMem << " bytes\n";
+                std::cout << "Total Memory   : " << MEM_TOTAL << " bytes\n\n";
+
+                // Header
+                std::cout << std::left
+                        << std::setw(14) << "Process"
+                        << std::setw(10) << "MemUsed"
+                        << std::setw(10) << "CPU"
+                        << std::setw(12) << "Status"
+                        << "Last Log\n";
+                std::cout << std::string(60, '-') << "\n";
+
+                std::lock_guard<std::mutex> lock(screensMutex);
+                for (const auto &proc : screens)
+                {
+                    std::string status;
+                    if (proc.isShutdown)
+                    {
+                        status = "Shutdown";
+                    }
+                    else if (proc.currentLine >= proc.totalLines)
+                    {
+                        status = "Finished";
+                    }
+                    else
+                    {
+                        status = "Running";
+                    }
+
+                    std::cout << std::left
+                            << std::setw(14) << proc.name
+                            << std::setw(10) << proc.memorySize
+                            << std::setw(10) << proc.cpuId
+                            << std::setw(12) << status
+                            << proc.lastLogTime << "\n";
+                }
+
+                std::cout << std::string(60, '=') << "\n\n";
             }
             else
             {
