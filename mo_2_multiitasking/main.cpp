@@ -1633,7 +1633,67 @@ int main()
             readConfigFile("config.txt");
             isInitialized = true;
         }
-        else if ((command[0] == "scheduler-test" || command[0] == "scheduler-stop") && currentScreen.name == "Main Menu")
+        else if (command[0] == "scheduler-test" && currentScreen.name == "Main Menu")
+        {
+            std::cout << "Starting scheduler test...\n";
+
+            std::thread testThread([&screens]()
+                                   {
+                int nextPid = 1;
+                int count = 5;  // You can change or read this from a config/command if needed
+                for (int i = 0; i < count; ++i)
+                {
+                    ExecutableScreen exec{};
+                    exec.name = "test" + std::to_string(nextPid++);
+                    exec.instructions = generateRandomInstructions(getRand(minInstructions, maxInstructions), exec.name);
+                    exec.totalLines = static_cast<int>(exec.instructions.size());
+                    exec.createdDate = getCurrentDateTime();
+
+                    int memSize;
+                    do {
+                        memSize = getRand(MIN_MEM_PER_PROC, MAX_MEM_PER_PROC);
+                    } while (!isPowerOfTwo(memSize));
+
+                    int allocStart = allocateMemory(exec.name, memSize);
+                    exec.memorySize = memSize;
+
+                    if (allocStart == -1) {
+                        std::cout << "[scheduler-test] No memory for " << exec.name << ", skipping.\n";
+                        std::this_thread::sleep_for(std::chrono::milliseconds(batchFreq * delayPerExec));
+                        continue;
+                    }
+
+                    {
+                        std::lock_guard<std::mutex> lg(screensMutex);
+                        screens.push_back(std::move(exec));
+                        ExecutableScreen* p = &screens.back();
+                        {
+                            std::lock_guard<std::mutex> ql(queueMutex);
+                            readyQueue.push(p);
+                        }
+                        cv.notify_one();
+                    }
+
+                    std::cout << "[scheduler-test] Generated process " << exec.name << " with " 
+                            << memSize << " bytes and " << exec.totalLines << " instructions.\n";
+
+                    std::this_thread::sleep_for(std::chrono::milliseconds(batchFreq * delayPerExec));
+                } });
+
+            testThread.detach();
+
+            if (!isPrinting)
+            {
+                isPrinting = true;
+                stopScheduler = false;
+                for (int i = 0; i < CPU_CORES; ++i)
+                {
+                    cpuThreads.emplace_back(cpuWorker, i);
+                }
+            }
+        }
+
+        else if (command[0] == "scheduler-stop" && currentScreen.name == "Main Menu")
         {
             std::cout << command[0] << " command recognized. Doing something.\n";
         }
