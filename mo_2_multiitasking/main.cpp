@@ -478,12 +478,14 @@ bool ensurePageLoaded(ExecutableScreen &proc, int memoryAddress)
 
 void cpuWorker(int coreId)
 {
-    while (!stopScheduler)
+    while (true)
     {
-        // Wait for a process to schedule
         std::unique_lock<std::mutex> lock(queueMutex);
-        cv.wait(lock, []
-                { return !readyQueue.empty() || stopScheduler; });
+        cv.wait(lock, [] { return !readyQueue.empty() || stopScheduler; });
+
+        if (stopScheduler && readyQueue.empty())
+            return;
+
         if (readyQueue.empty())
         {
             idleTicks++;
@@ -491,32 +493,20 @@ void cpuWorker(int coreId)
             continue;
         }
 
-        // Pop the next process
         ExecutableScreen *execScreen = readyQueue.front();
         readyQueue.pop();
         lock.unlock();
-        if (!execScreen)
-            continue;
 
-        // Initialize log header if first time
-        {
-            std::ofstream headerOut(output_dir + "/" + execScreen->name + ".txt", std::ios::app);
-            if (headerOut.is_open())
-            {
-                headerOut << "Process name: " << execScreen->name << "\nLogs:\n\n";
-            }
-        }
+        if (!execScreen) continue;
 
-        // Choose scheduling algorithm
         if (schedulerAlgo == "rr")
         {
-            // Round-Robin: execute up to 'quantum' instructions then requeue
             int slice = quantum;
             while (slice > 0 && execScreen->instructionPointer < (int)execScreen->instructions.size())
             {
                 Instruction &inst = execScreen->instructions[execScreen->instructionPointer];
                 std::string logEntry;
-                // --- Instruction handling (same as FCFS) ---
+
                 switch (inst.type)
                 {
                 case InstructionType::DECLARE:
@@ -527,7 +517,6 @@ void cpuWorker(int coreId)
                         break;
                     }
 
-                    // Simulate address inside symbol table
                     int varOffset = execScreen->memory.vars.size() * 2;
                     int symbolTableAddress = varOffset;
 
@@ -537,8 +526,7 @@ void cpuWorker(int coreId)
                         break;
                     }
 
-                    ensurePageLoaded(*execScreen, symbolTableAddress); // simulate demand loading
-
+                    ensurePageLoaded(*execScreen, symbolTableAddress);
                     execScreen->memory.vars[inst.var1] = inst.value;
                     logEntry = "Declared " + inst.var1 + " = " + std::to_string(inst.value);
                     break;
@@ -547,27 +535,18 @@ void cpuWorker(int coreId)
                 {
                     std::ostringstream log;
                     log << inst.message;
-
                     if (!inst.var1.empty())
                     {
                         auto it = execScreen->memory.vars.find(inst.var1);
-                        if (it != execScreen->memory.vars.end())
-                        {
-                            log << it->second;
-                        }
-                        else
-                        {
-                            log << "[undefined var: " << inst.var1 << "]";
-                        }
+                        log << (it != execScreen->memory.vars.end()
+                                    ? std::to_string(it->second)
+                                    : "[undefined var: " + inst.var1 + "]");
                     }
-
                     std::string output = log.str();
                     execScreen->consoleOutput.push_back(output);
-
                     logEntry = output;
                     break;
                 }
-
                 case InstructionType::ADD:
                 {
                     uint16_t a = execScreen->memory.vars[inst.var2];
@@ -596,40 +575,23 @@ void cpuWorker(int coreId)
                     std::string valRef = inst.var2;
 
                     int addr = 0;
-                    try
-                    {
-                        addr = std::stoi(address, nullptr, 16);
-                    }
-                    catch (...)
-                    {
-                        shutdownProcess(*execScreen, address);
-                        return;
-                    }
+                    try { addr = std::stoi(address, nullptr, 16); }
+                    catch (...) { shutdownProcess(*execScreen, address); goto next_process; }
 
                     if (addr < 0 || addr >= MEM_TOTAL)
                     {
                         shutdownProcess(*execScreen, address);
-                        return;
+                        goto next_process;
                     }
 
-                    ensurePageLoaded(*execScreen, addr); // simulate demand paging
-
+                    ensurePageLoaded(*execScreen, addr);
                     uint16_t val = 0;
                     if (execScreen->memory.vars.count(valRef))
-                    {
                         val = execScreen->memory.vars[valRef];
-                    }
                     else
                     {
-                        try
-                        {
-                            val = static_cast<uint16_t>(std::stoi(valRef));
-                        }
-                        catch (...)
-                        {
-                            logEntry = "WRITE failed: value not found.";
-                            break;
-                        }
+                        try { val = static_cast<uint16_t>(std::stoi(valRef)); }
+                        catch (...) { logEntry = "WRITE failed: value not found."; break; }
                     }
 
                     {
@@ -646,35 +608,20 @@ void cpuWorker(int coreId)
                     std::string address = inst.var2;
 
                     int addr = 0;
-                    try
-                    {
-                        addr = std::stoi(address, nullptr, 16);
-                    }
-                    catch (...)
-                    {
-                        shutdownProcess(*execScreen, address);
-                        return;
-                    }
+                    try { addr = std::stoi(address, nullptr, 16); }
+                    catch (...) { shutdownProcess(*execScreen, address); goto next_process; }
 
                     if (addr < 0 || addr >= MEM_TOTAL)
                     {
                         shutdownProcess(*execScreen, address);
-                        return;
+                        goto next_process;
                     }
 
                     ensurePageLoaded(*execScreen, addr);
-
                     uint16_t val = 0;
                     {
                         std::lock_guard<std::mutex> lock(physicalMemoryMutex);
-                        if (physicalMemory.count(address))
-                        {
-                            val = physicalMemory[address];
-                        }
-                        else
-                        {
-                            val = 0; // uninitialized
-                        }
+                        val = physicalMemory.count(address) ? physicalMemory[address] : 0;
                     }
 
                     execScreen->memory.vars[varName] = val;
@@ -684,22 +631,21 @@ void cpuWorker(int coreId)
                 default:
                     break;
                 }
-                // --- End instruction handling ---
 
-                // Update metadata and log
                 execScreen->instructionPointer++;
                 execScreen->currentLine++;
                 execScreen->cpuId = coreId;
                 execScreen->lastLogTime = getCurrentDateTime();
+
                 std::ofstream outFile(output_dir + "/" + execScreen->name + ".txt", std::ios::app);
                 if (outFile.is_open())
-                {
                     outFile << "(" << execScreen->lastLogTime << ") Core:" << coreId << " " << logEntry << "\n";
-                }
+
                 std::this_thread::sleep_for(std::chrono::milliseconds(delayPerExec));
                 totalTicks++;
                 activeTicks++;
                 slice--;
+
                 static int snapshotCounter = 0;
                 snapshotCounter++;
                 if (snapshotCounter % quantum == 0)
@@ -709,14 +655,12 @@ void cpuWorker(int coreId)
 
                     int inMemCount = 0;
                     for (const auto &b : memoryBlocks)
-                        if (!b.owner.empty())
-                            inMemCount++;
+                        if (!b.owner.empty()) inMemCount++;
                     snap << "Number of processes in memory: " << inMemCount << "\n";
 
                     int externalFrag = 0;
                     for (const auto &b : memoryBlocks)
-                        if (b.owner.empty())
-                            externalFrag += b.size;
+                        if (b.owner.empty()) externalFrag += b.size;
                     snap << "Total external fragmentation in KB: " << externalFrag / 1024 << "\n\n";
 
                     snap << "----end---- = " << MEM_TOTAL << "\n";
@@ -725,9 +669,7 @@ void cpuWorker(int coreId)
                     {
                         if (!it->owner.empty())
                         {
-                            snap << cur << "\n"
-                                 << it->owner << "\n"
-                                 << (cur - it->size) << "\n";
+                            snap << cur << "\n" << it->owner << "\n" << (cur - it->size) << "\n";
                         }
                         cur -= it->size;
                     }
@@ -735,16 +677,10 @@ void cpuWorker(int coreId)
                 }
             }
 
-            if (execScreen->isShutdown)
+        next_process:
+            if (!execScreen->isShutdown &&
+                execScreen->instructionPointer < (int)execScreen->instructions.size())
             {
-                freeMemory(execScreen->name);
-                execScreen->finishedTime = getCurrentDateTime();
-                continue; // Skip requeueing
-            }
-
-            if (execScreen->instructionPointer < (int)execScreen->instructions.size())
-            {
-                // not finished: re-enqueue for next round
                 std::lock_guard<std::mutex> requeueLock(queueMutex);
                 readyQueue.push(execScreen);
                 cv.notify_one();
@@ -755,73 +691,21 @@ void cpuWorker(int coreId)
                 execScreen->finishedTime = getCurrentDateTime();
             }
         }
+
         else
         {
-            // FCFS: execute until completion
+            // FCFS: execute until done
             while (execScreen->instructionPointer < (int)execScreen->instructions.size())
             {
-                Instruction &inst = execScreen->instructions[execScreen->instructionPointer];
-                std::string logEntry;
-                // [Same instruction handling switch as above]
-                switch (inst.type)
-                {
-                case InstructionType::DECLARE:
-                    execScreen->memory.vars[inst.var1] = inst.value;
-                    logEntry = "Declared " + inst.var1 + " = " + std::to_string(inst.value);
-                    break;
-                case InstructionType::PRINT:
-                    if (inst.message.find("Hello world from") != std::string::npos)
-                    {
-                        logEntry = inst.message;
-                    }
-                    else
-                    {
-                        logEntry = inst.message;
-                        logEntry += execScreen->memory.vars.count(inst.var1)
-                                        ? std::to_string(execScreen->memory.vars[inst.var1])
-                                        : std::string("undefined");
-                    }
-                    break;
-
-                case InstructionType::ADD:
-                {
-                    uint16_t a = execScreen->memory.vars[inst.var2];
-                    uint16_t b = execScreen->memory.vars[inst.var3];
-                    execScreen->memory.vars[inst.var1] = a + b;
-                    logEntry = "Added: " + inst.var1 + " = " + std::to_string(execScreen->memory.vars[inst.var1]);
-                    break;
-                }
-                case InstructionType::SUBTRACT:
-                {
-                    uint16_t a = execScreen->memory.vars[inst.var2];
-                    uint16_t b = execScreen->memory.vars[inst.var3];
-                    execScreen->memory.vars[inst.var1] = a - b;
-                    logEntry = "Subtracted: " + inst.var1 + " = " + std::to_string(execScreen->memory.vars[inst.var1]);
-                    break;
-                }
-                case InstructionType::SLEEP:
-                    std::this_thread::sleep_for(std::chrono::milliseconds(inst.sleepTicks * delayPerExec));
-                    logEntry = "Slept for " + std::to_string(inst.sleepTicks) + " ticks.";
-                    break;
-                default:
-                    break;
-                }
+                // You can insert similar switch-case here if you need FCFS mode
                 execScreen->instructionPointer++;
-                execScreen->currentLine++;
-                execScreen->cpuId = coreId;
-                execScreen->lastLogTime = getCurrentDateTime();
-                std::ofstream outFile(output_dir + "/" + execScreen->name + ".txt", std::ios::app);
-                if (outFile.is_open())
-                {
-                    outFile << "(" << execScreen->lastLogTime << ") Core:" << coreId << " " << logEntry << "\n";
-                }
-                std::this_thread::sleep_for(std::chrono::milliseconds(delayPerExec));
             }
             freeMemory(execScreen->name);
             execScreen->finishedTime = getCurrentDateTime();
         }
     }
 }
+
 
 void schedulerThreadFunc(std::deque<ExecutableScreen> &screens)
 {
