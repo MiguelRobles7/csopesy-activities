@@ -465,7 +465,19 @@ void loadPageIntoFrame(ExecutableScreen &proc, int virtualPage)
 
 bool ensurePageLoaded(ExecutableScreen &proc, int memoryAddress)
 {
+    if (memoryAddress < 0 || memoryAddress >= proc.memorySize)
+    {
+        shutdownProcess(proc, "Memory access violation");
+        return false;
+    }
+
     int virtualPage = memoryAddress / MEM_FRAME_SIZE;
+
+    if (virtualPage < 0 || virtualPage >= proc.pageTable.size())
+    {
+        shutdownProcess(proc, "Virtual page access violation");
+        return false;
+    }
 
     if (!proc.pageTable[virtualPage].present)
     {
@@ -511,24 +523,30 @@ void cpuWorker(int coreId)
                 {
                 case InstructionType::DECLARE:
                 {
-                    if (execScreen->memory.vars.size() >= 32)
+                    size_t maxVars = execScreen->memorySize / 2;
+                    if (execScreen->memory.vars.size() >= maxVars)
                     {
-                        logEntry = "DECLARE skipped: symbol table full.";
+                        logEntry = "DECLARE skipped: symbol table full (" + std::to_string(maxVars) + " vars max).";
                         break;
                     }
 
                     int varOffset = execScreen->memory.vars.size() * 2;
                     int symbolTableAddress = varOffset;
 
-                    if (symbolTableAddress >= 64)
+                    if (symbolTableAddress >= execScreen->memorySize)
                     {
-                        logEntry = "DECLARE failed: out of symbol table bounds.";
+                        logEntry = "DECLARE failed: symbol table overflow.";
                         break;
                     }
 
-                    ensurePageLoaded(*execScreen, symbolTableAddress);
-                    execScreen->memory.vars[inst.var1] = inst.value;
-                    logEntry = "Declared " + inst.var1 + " = " + std::to_string(inst.value);
+                    if (!ensurePageLoaded(*execScreen, symbolTableAddress))
+                    {
+                        logEntry = "DECLARE failed: could not load symbol table page.";
+                        break;
+                    }
+
+                    execScreen->memory.vars[inst.var1] = varOffset;
+                    logEntry = "DECLARE " + inst.var1 + " at address " + std::to_string(varOffset);
                     break;
                 }
                 case InstructionType::PRINT:
@@ -1041,7 +1059,7 @@ std::vector<Instruction> generateRandomInstructions(int count, const std::string
 
 bool isPowerOfTwo(int x)
 {
-    return (x >= 64 && x <= 8192) && (x & (x - 1)) == 0;
+    return (x & (x - 1)) == 0;
 }
 
 int main()
@@ -1092,17 +1110,15 @@ int main()
             {
                 schedulerRunning = true;
 
-                schedulerGeneratorThread = std::thread([&screens]()
-                                                       {
+                schedulerGeneratorThread = std::thread([&screens]() {
                     int nextPid = 1;
-                    while (schedulerRunning) {
+                    while (schedulerRunning)
+                    {
                         ExecutableScreen exec{};
                         exec.name = "p" + std::to_string(nextPid++);
-                        exec.instructions = generateRandomInstructions(
-                                            getRand(minInstructions, maxInstructions), exec.name);
+                        exec.instructions = generateRandomInstructions(getRand(minInstructions, maxInstructions), exec.name);
                         exec.totalLines    = exec.instructions.size();
-                        exec.createdDate   = getCurrentDateTime();
-                        
+                        exec.createdDate = getCurrentDateTime();
                         int memSize;
                         do {
                             memSize = getRand(MIN_MEM_PER_PROC, MAX_MEM_PER_PROC);
@@ -1111,28 +1127,27 @@ int main()
                         int allocStart = allocateMemory(exec.name, memSize);
                         exec.memorySize = memSize;
 
-                        if (allocStart == -1) {
-                            // std::cout << "No memory for " << exec.name << ", requeueing.\n";
+                        if (allocStart == -1)
+                        {
+                            // std::cout << "[generator] Skipped " << exec.name << ": insufficient memory.\n";
                             std::this_thread::sleep_for(std::chrono::milliseconds(batchFreq * delayPerExec));
                             continue;
                         }
 
+                        {
+                            std::lock_guard<std::mutex> lg(screensMutex);
+                            screens.push_back(std::move(exec));
+                            ExecutableScreen *p = &screens.back();
 
-                        {
-                        std::lock_guard<std::mutex> lg(screensMutex);
-                        screens.push_back(std::move(exec));
-                        // **Immediately** enqueue the new process:
-                        ExecutableScreen* p = &screens.back();
-                        {
                             std::lock_guard<std::mutex> ql(queueMutex);
                             readyQueue.push(p);
                         }
-                        cv.notify_one();
-                        }
 
-                        std::this_thread::sleep_for(
-                            std::chrono::milliseconds(batchFreq * delayPerExec));
-                    } });
+                        cv.notify_one();
+                        std::this_thread::sleep_for(std::chrono::milliseconds(batchFreq * delayPerExec));
+                    }
+                });
+
                 schedulerGeneratorThread.detach();
                 if (!isPrinting)
                 {
