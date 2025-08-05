@@ -265,8 +265,25 @@ void shutdownProcess(ExecutableScreen &proc, const std::string &offendingAddr)
 {
     proc.isShutdown = true;
     proc.finishedTime = getCurrentDateTime();
-    proc.shutdownMessage = "Process " + proc.name + " shut down due to memory access violation error that occurred at " +
-                           proc.finishedTime + ". " + offendingAddr + " invalid.";
+
+    std::string formattedAddr = offendingAddr;
+    if (formattedAddr.find("0x") != 0)
+    {
+        try
+        {
+            int addrVal = std::stoi(offendingAddr);
+            std::stringstream ss;
+            ss << "0x" << std::uppercase << std::hex << addrVal;
+            formattedAddr = ss.str();
+        }
+        catch (...)
+        {
+        }
+    }
+
+    proc.shutdownMessage = "Process " + proc.name +
+                           " shut down due to memory access violation error that occurred at " +
+                           proc.finishedTime + ". " + formattedAddr + " invalid.";
     freeMemory(proc.name);
 }
 
